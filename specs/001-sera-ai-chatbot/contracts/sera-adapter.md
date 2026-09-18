@@ -22,7 +22,7 @@ Worker は `sera-mcp` を runtime import/起動せず、必要な Sera REST API 
 | `listMarkets` | `GET /markets` | public | read | market/step/precision |
 | `getFxRate` | `GET /fx/rate` | public | read | reference price only |
 | `getQuote` | `POST /swap/quote` | per upstream | read/preparation | quote ID, route params, fee, expiry |
-| `getBalances` | `GET /balances` | account | read | Sera account balance |
+| `getSeraAccountBalances` | `GET /balances` | account | read | Sera account balance。Privy wallet 残高とは混在させない |
 | `listOrders` | `GET /orders` | account | read | swap state evidence |
 | `listFills` | `GET /fills` | account | read | execution/fill evidence |
 | `prepareTransfer` | `POST /transfer` | account | prepare | unsigned EIP-1559 transaction |
@@ -35,7 +35,7 @@ Worker は `sera-mcp` を runtime import/起動せず、必要な Sera REST API 
 Strands に公開してよい tool は次だけとする。
 
 - `get_wallet_summary`: authenticated user の wallet address/network の safe projection
-- `get_balances`: authenticated user の balance
+- `get_balances`: ownership 検証済み Privy wallet address に対する Sepolia RPC の ERC-20 balance。token address、block、source を返す
 - `list_markets`, `get_fx_rate`, `estimate_synthetic_depth`: read-only market data
 - `list_my_orders`, `list_my_fills`: authenticated user scope の read-only history
 - `draft_swap_proposal`, `draft_transfer_proposal`: proposal API を呼び、`proposal.ready` を返すまで。承認・署名・送信はしない
@@ -48,6 +48,8 @@ Agent tool に公開しない operation:
 - `executeSwap`、`sendTransfer`、Privy wallet RPC submission
 - secret/API credential access
 
+`getSeraAccountBalances` は Privy user/wallet と Sera account の一対一対応を成立性 spike で証明するまで Agent tool に公開しない。利用者 wallet の ERC-20 残高は Sera adapter ではなく Ethereum RPC adapter が `balanceOf` で取得する。
+
 ## Synthetic depth semantics
 
 `infer_book`、`probe_depth`、`scan_markets` 相当の結果は複数サイズの executable quote から推定した depth である。応答は常に `informationKind: SYNTHETIC_DEPTH`、source `SERA_QUOTE`、各 quote の fetched/expiry を含める。authoritative order book、注文総量、約定保証とは表示しない。
@@ -59,4 +61,3 @@ Agent tool に公開しない operation:
 3. external idempotency key は stable `operation.id` から導出する。
 4. timeout/response loss は `UNKNOWN` であり、成功/失敗を推測しない。
 5. write response は operation evidence として hash/reference のみ保存し、署名や credential は保存しない。
-

@@ -265,11 +265,11 @@ paths:
               $ref: '#/components/schemas/CreateProposalRequest'
       responses:
         '201':
-          description: 承認待ち proposal
+          description: 同じ transaction で作成した承認待ち proposal と operation
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TransactionProposal'
+                $ref: '#/components/schemas/CreateTransactionProposalResponse'
         default:
           $ref: '#/components/responses/Problem'
   /v1/transaction-proposals/{proposalId}:
@@ -289,6 +289,33 @@ paths:
           $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
+  /v1/transaction-proposals/{proposalId}/decision:
+    post:
+      tags: [transaction]
+      operationId: recordTransactionProposalDecision
+      description: 利用者による拒否または取消をバックエンドの状態と監査イベントへ記録する。
+      parameters:
+        - $ref: '#/components/parameters/ProposalId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionDecisionRequest'
+      responses:
+        '200':
+          description: 記録済み decision と同じ operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionDecisionResponse'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '410':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
   /v1/transaction-proposals/{proposalId}/approval-request:
     post:
       tags: [transaction]
@@ -302,6 +329,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [proposalVersion, proposalHash]
               properties:
                 proposalVersion:
@@ -380,6 +408,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Operation'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/operations/{operationId}/audit-events:
+    get:
+      tags: [transaction]
+      operationId: listOperationAuditEvents
+      description: 所有者だけが、secret-free な proposal・decision・approval・sign・submit・status の監査イベントを時系列で取得する。
+      parameters:
+        - $ref: '#/components/parameters/OperationId'
+      responses:
+        '200':
+          description: operation に紐づく監査イベント
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 1000
+                items:
+                  $ref: '#/components/schemas/AuditEvent'
+        '404':
+          $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
 components:
@@ -496,19 +545,24 @@ components:
         chainId: { type: integer, enum: [11155111] }
     BalanceList:
       type: object
-      required: [items, fetchedAt, source]
+      additionalProperties: false
+      required: [walletAddress, chainId, blockNumber, items, fetchedAt, source]
       properties:
+        walletAddress: { $ref: '#/components/schemas/EvmAddress' }
+        chainId: { type: integer, enum: [11155111] }
+        blockNumber: { type: string, pattern: '^[0-9]+$' }
         items:
           type: array
           items:
             type: object
+            additionalProperties: false
             required: [token, amountRaw, amount]
             properties:
               token: { $ref: '#/components/schemas/Token' }
               amountRaw: { $ref: '#/components/schemas/DecimalInteger' }
               amount: { type: string, pattern: '^[0-9]+(\.[0-9]+)?$' }
         fetchedAt: { type: string, format: date-time }
-        source: { type: string, enum: [SERA] }
+        source: { type: string, enum: [ETHEREUM_RPC] }
     Market:
       type: object
       required: [symbol, base, quote, informationKind]
@@ -570,6 +624,7 @@ components:
         propertyName: kind
     CreateSwapProposalRequest:
       type: object
+      additionalProperties: false
       required: [kind, inputTokenAddress, outputTokenAddress, inputAmountRaw, maxSlippageBps]
       properties:
         kind: { type: string, enum: [SWAP] }
@@ -580,6 +635,7 @@ components:
         conversationId: { type: string, format: uuid }
     CreateTransferProposalRequest:
       type: object
+      additionalProperties: false
       required: [kind, tokenAddress, amountRaw, recipient]
       properties:
         kind: { type: string, enum: [TRANSFER] }
@@ -587,37 +643,140 @@ components:
         amountRaw: { $ref: '#/components/schemas/DecimalInteger' }
         recipient: { $ref: '#/components/schemas/EvmAddress' }
         conversationId: { type: string, format: uuid }
-    TransactionProposal:
+    CreateTransactionProposalResponse:
       type: object
-      required: [id, kind, version, proposalHash, network, chainId, fromAddress, summary, expiresAt, createdAt]
+      additionalProperties: false
+      required: [proposal, operation]
+      properties:
+        proposal:
+          $ref: '#/components/schemas/TransactionProposal'
+        operation:
+          $ref: '#/components/schemas/Operation'
+    Fee:
+      type: object
+      additionalProperties: false
+      required: [assetSymbol, amountRaw, source]
+      properties:
+        assetSymbol: { type: string, minLength: 1, maxLength: 16 }
+        tokenAddress: { $ref: '#/components/schemas/EvmAddress' }
+        amountRaw: { $ref: '#/components/schemas/DecimalInteger' }
+        source: { type: string, enum: [SERA_QUOTE, SERA_TRANSFER, ETHEREUM_RPC] }
+    TransactionProposal:
+      oneOf:
+        - $ref: '#/components/schemas/SwapProposal'
+        - $ref: '#/components/schemas/TransferProposal'
+      discriminator:
+        propertyName: kind
+        mapping:
+          SWAP: '#/components/schemas/SwapProposal'
+          TRANSFER: '#/components/schemas/TransferProposal'
+    SwapProposal:
+      type: object
+      additionalProperties: false
+      required: [id, operationId, kind, version, proposalHash, network, chainId, fromAddress, inputToken, outputToken, inputAmountRaw, expectedOutputAmountRaw, fee, maxSlippageBps, quoteId, quoteExpiresAt, expiresAt, createdAt]
       properties:
         id: { type: string, format: uuid }
-        kind: { type: string, enum: [SWAP, TRANSFER] }
+        operationId: { type: string, format: uuid }
+        kind: { type: string, enum: [SWAP] }
         version: { type: integer, minimum: 1 }
         proposalHash: { $ref: '#/components/schemas/Hash' }
         network: { type: string, enum: [SEPOLIA] }
         chainId: { type: integer, enum: [11155111] }
         fromAddress: { $ref: '#/components/schemas/EvmAddress' }
-        summary:
-          type: object
-          additionalProperties: true
-          description: UI 表示用。token、amount、recipient、fee、slippage、quote expiry の固定値を含む。
+        inputToken: { $ref: '#/components/schemas/Token' }
+        outputToken: { $ref: '#/components/schemas/Token' }
+        inputAmountRaw: { $ref: '#/components/schemas/DecimalInteger' }
+        expectedOutputAmountRaw: { $ref: '#/components/schemas/DecimalInteger' }
+        fee: { $ref: '#/components/schemas/Fee' }
+        maxSlippageBps: { type: integer, minimum: 0, maximum: 10000 }
+        quoteId: { type: string, minLength: 1, maxLength: 256 }
+        quoteExpiresAt: { type: string, format: date-time }
         expiresAt: { type: string, format: date-time }
         createdAt: { type: string, format: date-time }
-    ApprovalRequest:
+    TransferProposal:
       type: object
-      required: [approvalId, kind, proposalHash, expiresAt, payload]
+      additionalProperties: false
+      required: [id, operationId, kind, version, proposalHash, network, chainId, fromAddress, recipient, token, amountRaw, fee, expiresAt, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        operationId: { type: string, format: uuid }
+        kind: { type: string, enum: [TRANSFER] }
+        version: { type: integer, minimum: 1 }
+        proposalHash: { $ref: '#/components/schemas/Hash' }
+        network: { type: string, enum: [SEPOLIA] }
+        chainId: { type: integer, enum: [11155111] }
+        fromAddress: { $ref: '#/components/schemas/EvmAddress' }
+        recipient: { $ref: '#/components/schemas/EvmAddress' }
+        token: { $ref: '#/components/schemas/Token' }
+        amountRaw: { $ref: '#/components/schemas/DecimalInteger' }
+        fee: { $ref: '#/components/schemas/Fee' }
+        expiresAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+    TransactionDecisionRequest:
+      type: object
+      additionalProperties: false
+      required: [proposalVersion, proposalHash, decision]
+      properties:
+        proposalVersion: { type: integer, minimum: 1 }
+        proposalHash: { $ref: '#/components/schemas/Hash' }
+        decision: { type: string, enum: [REJECT, CANCEL] }
+    TransactionDecisionResponse:
+      type: object
+      additionalProperties: false
+      required: [proposalId, operationId, decision, operation]
+      properties:
+        proposalId: { type: string, format: uuid }
+        operationId: { type: string, format: uuid }
+        decision: { type: string, enum: [REJECT, CANCEL] }
+        operation: { $ref: '#/components/schemas/Operation' }
+    ApprovalRequest:
+      oneOf:
+        - $ref: '#/components/schemas/Eip712ApprovalRequest'
+        - $ref: '#/components/schemas/PrivyAuthorizationRequest'
+      discriminator:
+        propertyName: kind
+        mapping:
+          EIP712_SIGNATURE: '#/components/schemas/Eip712ApprovalRequest'
+          PRIVY_REQUEST_SIGNATURE: '#/components/schemas/PrivyAuthorizationRequest'
+    Eip712ApprovalRequest:
+      type: object
+      additionalProperties: false
+      required: [approvalId, operationId, kind, proposalHash, expiresAt, canonicalTypedDataJson, digest]
       properties:
         approvalId: { type: string, format: uuid }
-        kind: { type: string, enum: [EIP712_SIGNATURE, PRIVY_REQUEST_SIGNATURE] }
+        operationId: { type: string, format: uuid }
+        kind: { type: string, enum: [EIP712_SIGNATURE] }
         proposalHash: { $ref: '#/components/schemas/Hash' }
         expiresAt: { type: string, format: date-time }
-        payload:
-          type: object
-          additionalProperties: true
-          description: client が表示済み proposal と照合して署名する exact payload
+        canonicalTypedDataJson:
+          type: string
+          minLength: 2
+          maxLength: 65536
+          description: server が Sera schema で検証し canonicalize した EIP-712 JSON。client は内容を変更せず署名する。
+        digest: { $ref: '#/components/schemas/Hash' }
+    PrivyAuthorizationRequest:
+      type: object
+      additionalProperties: false
+      required: [approvalId, operationId, kind, proposalHash, expiresAt, walletId, method, chainId, serializedRequest, requestBodyHash, privyIdempotencyKey]
+      properties:
+        approvalId: { type: string, format: uuid }
+        operationId: { type: string, format: uuid }
+        kind: { type: string, enum: [PRIVY_REQUEST_SIGNATURE] }
+        proposalHash: { $ref: '#/components/schemas/Hash' }
+        expiresAt: { type: string, format: date-time }
+        walletId: { type: string, minLength: 1, maxLength: 256 }
+        method: { type: string, enum: [eth_sendTransaction] }
+        chainId: { type: integer, enum: [11155111] }
+        serializedRequest:
+          type: string
+          minLength: 2
+          maxLength: 65536
+          description: client authorization の対象となる exact serialized Privy request。
+        requestBodyHash: { $ref: '#/components/schemas/Hash' }
+        privyIdempotencyKey: { type: string, minLength: 16, maxLength: 128 }
     ExecuteProposalRequest:
       type: object
+      additionalProperties: false
       required: [approvalId, proposalVersion, proposalHash, authorization]
       properties:
         approvalId: { type: string, format: uuid }
@@ -626,17 +785,20 @@ components:
         authorization:
           oneOf:
             - type: object
+              additionalProperties: false
               required: [kind, signature]
               properties:
                 kind: { type: string, enum: [EIP712_SIGNATURE] }
                 signature: { type: string, pattern: '^0x[0-9a-fA-F]+$' }
             - type: object
+              additionalProperties: false
               required: [kind, signature]
               properties:
                 kind: { type: string, enum: [PRIVY_REQUEST_SIGNATURE] }
                 signature: { type: string, minLength: 1, maxLength: 8192 }
     Operation:
       type: object
+      additionalProperties: false
       required: [id, proposalId, kind, status, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
@@ -649,6 +811,7 @@ components:
         seraOrderId: { type: string }
         lastEvidence:
           type: object
+          additionalProperties: false
           required: [type, checkedAt]
           properties:
             type: { type: string, enum: [SERA_RESPONSE, SERA_ORDER, SERA_FILL, RPC_RECEIPT, TIMEOUT] }
@@ -657,3 +820,19 @@ components:
         failureCode: { type: string }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+    AuditEvent:
+      type: object
+      additionalProperties: false
+      required: [id, operationId, action, outcome, correlationId, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        operationId: { type: string, format: uuid }
+        proposalId: { type: string, format: uuid }
+        approvalId: { type: string, format: uuid }
+        action:
+          type: string
+          enum: [PROPOSAL_CREATED, REJECTED, CANCELLED, APPROVAL_REQUESTED, SIGNATURE_ACCEPTED, SIGNATURE_REJECTED, SUBMIT_STARTED, SUBMIT_ACCEPTED, STATUS_CHANGED, RECHECK_REQUESTED]
+        outcome: { type: string, enum: [SUCCEEDED, REJECTED, FAILED, UNKNOWN] }
+        safeReference: { type: string, maxLength: 512 }
+        correlationId: { type: string, minLength: 1, maxLength: 128 }
+        createdAt: { type: string, format: date-time }

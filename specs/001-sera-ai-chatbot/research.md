@@ -13,7 +13,7 @@
 
 ## 2. Worker からの Sera 接続方式
 
-**Decision**: Sera REST API の direct adapter を Worker に実装する。MVP は `/tokens`、`/markets`、`/config`、`/fx/rate`、`/swap/quote`、`/swap`、`/balances`、`/orders`、`/fills`、`/transfer`、`/transfer/send`、`/system/time` の必要部分だけを zod で検証する。`sera-mcp` の [`client.ts`](https://github.com/sera-cx/sera-mcp/blob/d6f50c1aa6098354d796b777a5474989e9acc1f7/src/client.ts) と tool schema を仕様根拠として参照する。
+**Decision**: Sera REST API の direct adapter を Worker に実装する。MVP は `/tokens`、`/markets`、`/config`、`/fx/rate`、`/swap/quote`、`/swap`、`/balances`、`/orders`、`/fills`、`/transfer`、`/transfer/send`、`/system/time` の必要部分だけを zod で検証する。ただし `/balances` は Sera account 残高であり、Privy wallet の利用者残高とは分離する。`sera-mcp` の [`client.ts`](https://github.com/sera-cx/sera-mcp/blob/d6f50c1aa6098354d796b777a5474989e9acc1f7/src/client.ts) と tool schema を仕様根拠として参照する。
 
 **Rationale**: `sera-mcp` は Node >=18.17、stdio/Express、`child_process`、`fs`、`better-sqlite3` 等の Node/native 前提を含む。Workers の `nodejs_compat` は native SQLite や子プロセスを提供しない。public remote MCP は keyless read/analytics と unsigned settle の一部17 tools に絞られ、balance、orders、transfer、execution を満たさず、gateway 自体も Node subprocess 構成である。direct adapter が最小で監査しやすい。
 
@@ -30,7 +30,8 @@
 | 製品能力 | Sera の根拠 | MVP 方針 |
 |----------|-------------|----------|
 | wallet 作成 | Sera にはない | Privy が担当 |
-| balance | `GET /balances` / `sera.get_balances` | user ownership 検証後に account credential で取得 |
+| Privy wallet balance | Sepolia RPC `eth_call` / ERC-20 `balanceOf` | wallet owner を検証し、token address・block・source とともに取得 |
+| Sera account balance | `GET /balances` / `sera.get_balances` | 別情報として扱い、Privy user/wallet 対応を実測で証明するまで US1 には表示しない |
 | market/price | `/markets`、`/fx/rate`、quote | source と取得時刻を表示 |
 | order book | `infer_book` / `probe_depth` / `scan_markets` | quote を反復した**推定 depth** と明記。取引所の authoritative book と呼ばない |
 | trade history | `/orders`、`/fills` | wallet owner のみ |
@@ -45,7 +46,7 @@
 
 ## 4. Strands Agents の Workers 互換性
 
-**Decision**: [`@strands-agents/sdk@1.18.0`](https://www.npmjs.com/package/@strands-agents/sdk) を候補として固定し、browser/default export だけを request-scoped Agent として Phase 0 で実測する。Node-only loader、stdio/SSE config loader、global mutable Agent は使わない。
+**Decision**: [`@strands-agents/sdk@1.18.0`](https://www.npmjs.com/package/@strands-agents/sdk) を候補として固定し、browser/default export だけを request-scoped Agent として tasks Phase 2 で実測する。Node-only loader、stdio/SSE config loader、global mutable Agent は使わない。
 
 **Rationale**: 現行 source は [`strands-agents/harness-sdk`](https://github.com/strands-agents/harness-sdk) へ移り、旧 `sdk-typescript` は archive 済み。package は Node >=22 を宣言する一方、browser bundle/test と Node export の分離があるため Workers で動く可能性はあるが、公式保証とは扱えない。Worker local/remote の bundle・runtime・stream/tool call を blocking spike にする。
 
@@ -63,7 +64,7 @@
 
 **Decision**: React の Privy login + `createOnLogin` による user-owned embedded Ethereum wallet、Worker の `@privy-io/node` による access token 検証、Privy DID と wallet ID/address/chain の server-side ownership 照合を採用する。server delegated signer と private key は MVP で使わない。
 
-swap は Sera が返す EIP-712 `route_params` を client wallet で署名する。transfer は Worker が exact Privy wallet RPC request と安定 idempotency key を組み立て、client の authorization signature を得て、Worker が同じ serialized request を Privy API へ送る経路を Phase 0 で検証する。
+swap は Sera が返す EIP-712 `route_params` を client wallet で署名する。transfer は Worker が exact Privy wallet RPC request と安定 idempotency key を組み立て、client の authorization signature を得て、Worker が同じ serialized request を Privy API へ送る経路を tasks Phase 2 で検証する。
 
 **Rationale**: 秘密鍵を browser/Worker/LLM へ露出せず、人間が意図した exact payload と server execution を結び付けられる。Privy idempotency key は同一 request を24時間同一処理として扱えるが、アプリ側 D1 の排他を置き換えるものではない。
 
@@ -75,7 +76,7 @@ swap は Sera が返す EIP-712 `route_params` を client wallet で署名する
 
 ## 7. 永続状態と同時実行制御
 
-**Decision**: D1 をユーザー、wallet link、会話、agent event、proposal、approval、operation、audit の正本とする。`operations(user_id, idempotency_key)` と proposal/version の unique 制約、`UPDATE ... WHERE status = 'AWAITING_APPROVAL'` の単一 winner で broadcast 権を取得する。
+**Decision**: D1 をユーザー、wallet link、会話、agent event、proposal、approval、operation、audit の正本とする。proposal と `AWAITING_APPROVAL` の Operation は同じ D1 transaction で作り、拒否・取消・承認・送信・終端まで stable operation ID を維持する。`operations(user_id, submission_idempotency_key)` と proposal/version の unique 制約、条件付き更新の単一 winner で broadcast 権を取得する。
 
 **Rationale**: 再接続・retry・Worker restart を越える状態が必要。D1 は relational ownership と transaction/conditional update を一つの resource で満たす。KV は強い一貫性が必要な idempotency に不適、メモリ/ファイルは永続しない。
 
@@ -133,5 +134,5 @@ swap は Sera が返す EIP-712 `route_params` を client wallet で署名する
 
 - `NEEDS CLARIFICATION`: 0
 - 憲章違反: 0
-- 実装前に実測が必要な事項: plan Phase 0 の6 spike として blocking gate 化済み
+- 実装前に実測が必要な事項: tasks Phase 2 の6 spike として blocking gate 化済み
 - mutable な外部事実: Sera token/market、model availability、Cloudflare limit は deploy/実行時に再検証する

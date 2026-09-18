@@ -15,7 +15,7 @@ User 1 ── 0..1 WalletLink
 User 1 ── * Conversation 1 ── * Message
 Conversation 1 ── * AgentRun 1 ── * AgentEvent
 User 1 ── * TransactionProposal 1 ── * Approval
-TransactionProposal 1 ── 0..1 Operation 1 ── * OperationObservation
+TransactionProposal 1 ── 1 Operation 1 ── * OperationObservation
 User 1 ── * AuditEvent
 ```
 
@@ -134,6 +134,7 @@ Sera runtime discovery の取得結果。正本は upstream で、これは短�
 | `user_id`, `wallet_link_id` | UUIDv7 | FK、ownership |
 | `conversation_id` | UUIDv7 | FK、任意 |
 | `kind` | enum | `SWAP`, `TRANSFER` |
+| `creation_idempotency_key` | string | `(user_id, creation_idempotency_key)` UNIQUE |
 | `version` | integer | 1以上。変更時は新 version/new proposal |
 | `network`, `chain_id` | string/integer | `SEPOLIA`, `11155111` |
 | `from_address` | EVM address | WalletLink と一致 |
@@ -153,6 +154,7 @@ Sera runtime discovery の取得結果。正本は upstream で、これは短�
 - 承認後に field を更新しない。quote/fee/recipient/amount の変更は新 proposal を作る。
 - `from_address` は承認時と実行時に WalletLink/Privy ownership と再一致させる。
 - `expires_at <= now`、capability change、hash mismatch のいずれかで実行禁止。
+- Proposal と `AWAITING_APPROVAL` の Operation は同一 D1 transaction で1件ずつ作成し、API は両方の ID を返す。
 
 ## 9. Approval
 
@@ -161,7 +163,7 @@ Sera runtime discovery の取得結果。正本は upstream で、これは短�
 | `id` | UUIDv7 | PK |
 | `proposal_id`, `user_id` | UUIDv7 | FK |
 | `proposal_version`, `proposal_hash` | integer/string | proposal と一致 |
-| `status` | enum | `PENDING`, `APPROVED`, `REJECTED`, `EXPIRED`, `CONSUMED` |
+| `status` | enum | `PENDING`, `APPROVED`, `REJECTED`, `CANCELLED`, `EXPIRED`, `CONSUMED` |
 | `authorization_kind` | enum | `EIP712_SIGNATURE`, `PRIVY_REQUEST_SIGNATURE` |
 | `authorization_digest` | string | signature bytes 自体ではなく digest/参照 |
 | `approved_at`, `expires_at`, `consumed_at` | timestamp | 状態に応じ required |
@@ -174,6 +176,7 @@ Sera runtime discovery の取得結果。正本は upstream で、これは短�
 ```text
 PENDING -> APPROVED -> CONSUMED
         -> REJECTED
+        -> CANCELLED
         -> EXPIRED
 APPROVED -> EXPIRED
 ```
@@ -185,10 +188,11 @@ APPROVED -> EXPIRED
 | Field | Type | Constraint |
 |-------|------|------------|
 | `id` | UUIDv7 | PK。外部 idempotency key の基礎 |
-| `user_id`, `proposal_id`, `approval_id` | UUIDv7 | FK、UNIQUE proposal execution |
+| `user_id`, `proposal_id` | UUIDv7 | FK、`proposal_id` UNIQUE |
+| `approval_id` | UUIDv7 | FK、承認完了まで NULL |
 | `kind` | enum | `SWAP`, `TRANSFER` |
 | `status` | enum | 下表 |
-| `idempotency_key` | string | `(user_id, idempotency_key)` UNIQUE |
+| `submission_idempotency_key` | string | 実行要求まで NULL、設定後は `(user_id, submission_idempotency_key)` UNIQUE |
 | `submission_lease` | string | winner token、任意 |
 | `tx_hash` | hex string | network accepted 後、任意、UNIQUE when present |
 | `sera_order_id` | string | swap accepted 後、任意、UNIQUE when present |
@@ -209,11 +213,12 @@ APPROVED -> EXPIRED
 
 **At-most-once algorithm**:
 
-1. `execute` transaction が auth/owner/hash/expiry/approval を再検証する。
-2. `(user_id, idempotency_key)` を insert。既存ならその Operation を返す。
+1. Proposal 作成 transaction が `(user_id, creation_idempotency_key)` を検証し、Proposal と `AWAITING_APPROVAL` Operation を同時に insert する。再試行時は既存の2 IDを返す。
+2. `execute` transaction が auth/owner/hash/expiry/approval を再検証し、`submission_idempotency_key` を初回だけ設定する。既存 key なら同じ Operation を返す。
 3. `AWAITING_APPROVAL -> SUBMITTING` の conditional update に成功した request だけが `submission_lease` を得る。
 4. stable operation ID から Privy/Sera idempotency key を生成して1回送る。
 5. response loss 時は再 broadcast せず、同じ external key と upstream status/RPC を照会する。
+6. 拒否または取消は Operation を `FAILED` へ遷移させ、`USER_REJECTED` または `USER_CANCELLED` を記録する。
 
 ## 11. OperationObservation
 
@@ -236,12 +241,14 @@ APPROVED -> EXPIRED
 | `id` | UUIDv7 | PK |
 | `user_id` | UUIDv7 | FK、任意（system event 可） |
 | `actor_type` | enum | `USER`, `SYSTEM`, `WORKFLOW` |
-| `action` | string | allowlisted event name |
+| `action` | enum | `PROPOSAL_CREATED`, `REJECTED`, `CANCELLED`, `APPROVAL_REQUESTED`, `SIGNATURE_ACCEPTED`, `SIGNATURE_REJECTED`, `SUBMIT_STARTED`, `SUBMIT_ACCEPTED`, `STATUS_CHANGED`, `RECHECK_REQUESTED` |
 | `resource_type`, `resource_id` | string | required |
-| `outcome` | enum | `ALLOWED`, `DENIED`, `FAILED` |
+| `outcome` | enum | `SUCCEEDED`, `REJECTED`, `FAILED`, `UNKNOWN` |
 | `correlation_id` | string | index |
 | `metadata_json` | JSON | token/signature/PII 禁止 |
 | `created_at` | timestamp | append-only |
+
+**Indexes**: `(user_id, resource_type, resource_id, created_at)` と `(resource_type, resource_id, action)` を持ち、operation ID から proposal、approval、署名要求、送信、状態変更を検索できるようにする。
 
 ## 13. ManagedResourceManifest（local artifact）
 
@@ -264,4 +271,3 @@ D1 table ではなく `.deploy/state/{stage}.json`（gitignore、secret-free）�
 - Conversation/Message: user deletion policy と教材環境の retention を設定可能にする。
 - Proposal/Approval/Operation/Observation/Audit: 財務監査・デバッグに必要な期間を stage policy で定め、勝手に TTL 削除しない。
 - CapabilitySnapshot: expiry 後に置換可能。proposal 内 snapshot は immutable。
-

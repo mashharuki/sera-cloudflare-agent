@@ -69,7 +69,7 @@ pnpm spike:concurrency --stage dev
 2. bundle/runtime に `child_process`、stdio、native SQLite、persistent `fs` の依存がない。
 3. `openai/gpt-5.6-terra` の stream、tool call、abort、provider error が schema 通り処理される。
 4. Privy access token と wallet owner が Worker で検証され、exact request authorization の payload hash が UI 表示と一致する。
-5. Sera testnet の tokens/markets/quote、read-only account route、transfer preparation が Worker fetch で zod validation を通る。
+5. Sepolia RPC の ERC-20 `balanceOf` が Privy wallet address・token address・block と対応し、Sera testnet の tokens/markets/quote、Sera account `/balances`、transfer preparation が Worker fetch で zod validation を通る。Privy wallet と Sera account の対応を証明できない場合、両残高を分離したままにする。
 6. 同じ approval/idempotency key を20並行送信して、application と upstream の broadcast 観測回数が最大1。
 7. SSE を切断・再接続して、seq の欠落/重複適用なしに terminal state へ到達する。
 8. 2 user の並行 run で conversation、wallet、proposal、event が混在しない。
@@ -101,7 +101,7 @@ curl -fsS http://127.0.0.1:8787/v1/health
 
 1. 新規 Privy user で login し、embedded wallet を作成する。
 2. 同じ user で reload/re-login し、同じ address と Sepolia が表示される。
-3. balance を尋ね、token、amount、network、source、fetched time を確認する。
+3. balance を尋ね、Privy wallet address に対する token、amount、token address、network、RPC block、source、fetched time を確認する。Sera account 残高が wallet 残高として混在しないことも確認する。
 4. 「JPYC/USDC の板」と尋ね、結果が `synthetic depth` / quote-based estimate と表示されることを確認する。
 5. 未対応情報を尋ね、捏造せず unsupported と source range を返すことを確認する。
 6. 別 user の conversation/wallet/run ID を REST に渡し、内容や存在を開示しないことを確認する。
@@ -113,7 +113,7 @@ Evidence: request correlation ID、stage、commit、source endpoint、取得時�
 1. capability endpoint で `JPYC/USDC`、両 address/decimals/minimum を確認する。
 2. chat から数量不足の swap を依頼し、追加質問前に proposal が作られないことを確認する。
 3. valid amount の proposal で input/output、expected amount、fee、slippage、network、quote expiry、proposal hash を確認する。
-4. 拒否時に network request の broadcast が0であることを確認する。
+4. proposal 作成時点で operation ID が返り、拒否・取消後も同じ ID で監査可能かつ broadcast が0であることを確認する。
 5. 承認後、EIP-712 payload hash と proposal hash の対応を確認して実行する。
 6. 同じ execute request を並行再送し、すべて同じ operation ID を返し、broadcast は最大1回であることを確認する。
 7. order/fill evidence により `SUCCEEDED` または根拠付き `FAILED` へ到達する。
@@ -121,7 +121,7 @@ Evidence: request correlation ID、stage、commit、source endpoint、取得時�
 
 ## 8. Transfer acceptance（Sepolia）
 
-1. JPYC または USDC、recipient、amount を入力し、from/to/token/amount/network/fee を確認する。
+1. JPYC または USDC、recipient、amount を入力し、proposal と同時に作成された operation ID、および from/to/token/amount/network/fee を確認する。
 2. malformed/zero-address、unsupported token、残高不足を送信前に拒否する。
 3. exact Privy authorization request の digest が proposal と一致することを確認して署名する。
 4. 20並行 execute で broadcast 最大1回、同一 operation ID を確認する。
@@ -169,4 +169,3 @@ pnpm inventory --stage dev
 ## 12. Documentation acceptance
 
 別の開発者が README のみで prerequisites、local read-only、remote deploy、主要 test、destroy を完了する。ブログ内の図・数値・スクリーンショットは実装 commit と `docs/evidence/` の実測に対応し、「予定」と「確認済み」を区別する。
-
