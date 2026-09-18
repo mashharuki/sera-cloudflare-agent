@@ -39,11 +39,14 @@
     "@biomejs/biome": "2.5.11",
     "@cloudflare/vitest-pool-workers": "0.22.0",
     "@playwright/test": "1.63.0",
+    "@strands-agents/sdk": "1.18.0",
     "@types/node": "^26.4.0",
     "knip": "^6.33.0",
     "newman": "6.2.2",
+    "openai": "6.45.0",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2",
-    "vitest": "5.0.1"
+    "vitest": "4.1.11",
+    "zod": "4.6.5"
   }
 }

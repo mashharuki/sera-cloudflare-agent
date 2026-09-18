@@ -7,7 +7,7 @@
 - Node.js / pnpm（root `packageManager` に従う）
 - Cloudflare account と、Workers Scripts / Pages / D1 / Workflows / Workers AI または AI Gateway に必要な最小権限 token
 - Privy app（embedded Ethereum wallet、許可 origin、Sepolia）
-- Sera testnet account/API credential
+- Sera public API は credential 不要。Sera account balance/treasury 機能を有効化して検証する場合のみ testnet account と API key/secret
 - Sepolia RPC endpoint と test token（JPYC/USDC）
 - OpenAI/provider credential または Cloudflare AI billing configuration
 - 実資産を使わないこと。MVP の write test は Sepolia のみ
@@ -20,10 +20,11 @@
 |-------|----------|--------|
 | `VITE_PRIVY_APP_ID`, API public URL, chain ID | Pages build env | no |
 | Privy app secret/verification config | Worker Secret/Binding | yes |
-| Sera API key/secret | Worker Secret | yes |
+| `SERA_NETWORK=sepolia` | Worker vars | no（公式 testnet URL は `sera-mcp` が解決） |
+| Sera API key/secret | Worker Secret | yes（account balance/treasury 機能を有効化する場合のみ） |
 | provider/API Gateway token | Worker Secret | yes |
 | D1 database, Workflow, AI binding | `wrangler.jsonc` stage config | resource ID は manifest と照合 |
-| model ID, Sera base URL, allowed origin | Worker vars | no（stage ごと固定） |
+| model ID, allowed origin | Worker vars | no（stage ごと固定） |
 
 ## 3. Baseline checks
 

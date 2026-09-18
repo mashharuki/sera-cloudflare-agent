@@ -1,0 +1,18 @@
+{
+  "$schema": "../../apps/backend/node_modules/wrangler/config-schema.json",
+  "name": "sera-strands-worker-spike",
+  "main": "strands-worker.ts",
+  // Local workerd bundled by @cloudflare/vitest-pool-workers 0.22.0 supports up to this date.
+  "compatibility_date": "2026-08-22",
+  "vars": {
+    "MODEL_ID": "openai/gpt-5.6-terra",
+    "AI_GATEWAY_BASE_URL": "https://api.cloudflare.com/client/v4/accounts/replace-with-account-id/ai/v1"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sera-feasibility-spike",
+      "database_id": "00000000-0000-0000-0000-000000000001"
+    }
+  ]
+}
