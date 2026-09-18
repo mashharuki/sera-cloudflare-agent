@@ -1,50 +1,130 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+同期影響レポート
+- バージョン変更: 未制定 → 1.0.0
+- 変更された原則: なし（初回制定）
+- 追加された原則:
+  - I. 資産操作は人間の明示承認を必須とする
+  - II. 認証・鍵・ユーザー境界を分離する
+  - III. Workers 実環境で成立性を証明する
+  - IV. 検証可能な事実と契約を正本とする
+  - V. 最小構成と必要な耐久性を両立する
+  - VI. デプロイから削除まで再現可能にする
+  - VII. 段階的な品質ゲートを通過する
+  - VIII. 教材として監査可能な記録を残す
+- 追加されたセクション:
+  - 技術・セキュリティ制約
+  - 開発ワークフローと品質ゲート
+- 削除されたセクション: なし
+- フォローアップ TODO: なし
+-->
 
-## Core Principles
+# Sera Cloudflare Agent プロジェクト憲章
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+## 基本原則
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### I. 資産操作は人間の明示承認を必須とする（非交渉）
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+- 読み取り操作と、swap・送金など資産を変更する操作を、型、API、UI、権限で明確に分離しなければならない。
+- 資産変更前に、ネットワーク、トークン、数量、送信先、見積額、手数料、スリッページ、期限を提示し、ユーザーの明示承認を得なければならない。
+- 承認対象を改ざん不能な識別子または同等の構造で実行要求に結び付け、内容変更や見積期限切れ時は再承認を要求しなければならない。
+- LLM の出力だけで資産操作を開始したり成功と判定したりしてはならない。ツールの構造化結果、RPC 応答、transaction receipt など検証可能な状態を根拠とする。
+- 冪等性キーと整合性のある同時実行制御により、二重クリック、再試行、並行要求による二重送信を防止しなければならない。送信済みで結果不明の取引は追跡可能にする。
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+理由: 金銭的損失と意図しない取引を防ぎ、承認からチェーン上の結果までを説明可能にするため。
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### II. 認証・鍵・ユーザー境界を分離する（非交渉）
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+- すべての保護対象操作で認証後に認可を行い、認証ユーザーと操作対象ウォレットの所有関係をサーバー側で検証しなければならない。
+- 秘密鍵、署名資格情報、アクセストークン、シークレットを、LLM コンテキスト、ブラウザ配布物、ログ、例外メッセージへ露出させてはならない。
+- ユーザーごとの認証、会話、ウォレット、承認、署名、取引状態を分離し、並行実行時にも混在させてはならない。
+- API、フォーム、URL、外部ツール応答を含むすべての外部入力を zod などの実行時スキーマで検証しなければならない。
+- 公開可能なフロントエンド設定と、Workers Bindings または Secrets で保持する秘密情報を明確に分離しなければならない。
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+理由: ウォレットの乗っ取り、越権操作、ユーザー間の情報混在、資格情報漏洩を構造的に防ぐため。
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+### III. Workers 実環境で成立性を証明する
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+- Cloudflare Workers を一般的な Node.js サーバーと同一視してはならない。`nodejs_compat`、型チェック、バンドル成功だけを互換性の証明として扱ってはならない。
+- 依存ライブラリごとに `child_process`・stdio、ファイルシステム、ローカル SQLite、ネイティブモジュール、Node.js 固有 API、初期化処理、バンドルサイズ、CPU、メモリ、サブリクエストの制約を確認しなければならない。
+- stdio 前提の MCP サーバーを Worker 上の子プロセスとして起動する設計は禁止する。HTTP 化、実在する remote MCP、または直接アダプターのいずれかを、確認済みの根拠に基づいて選択する。
+- 不確実性の高い依存関係は、大規模な UI 実装より前に小さな技術検証を行い、ローカル Workers ランタイムと Cloudflare 上の双方で合格させなければならない。
 
-## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
+理由: エッジ実行環境で成立しない構成への投資を避け、実行時の問題を早期に検出するため。
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+### IV. 検証可能な事実と契約を正本とする
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+- 存在しない SDK、API、ツール、remote MCP、ネットワーク、トークンを仮定してはならない。確認済みの事実、仮説、未確認事項を明示的に区別する。
+- 技術的主張と依存関係の判断は、参照したソースパス、公式資料、version、tag、commit のいずれかへ追跡可能でなければならない。
+- OpenAPI YAML を REST API 契約の正本とし、Hono 実装および生成クライアントとの整合を自動検証しなければならない。REST API 契約と MCP ツール定義を混同してはならない。
+- LLM の文章、モック、型チェック、バンドル成功を、実ネットワークまたは実ランタイムでの動作証明として扱ってはならない。
+
+理由: 推測の混入を抑え、設計判断、実装、検証結果を再現可能にするため。
+
+### V. 最小構成と必要な耐久性を両立する
+
+- アプリ側で常時稼働するサーバーまたはコンテナの運用を要求してはならない。Privy、LLM、RPC、Sera などの外部依存と信頼境界を明示する。
+- Cloudflare の追加サービスは、整合性、同時実行制御、耐久性、処理時間の具体的要件がある場合に限り採用し、理由、代替案、費用、削除方法を記録しなければならない。
+- 承認状態、冪等性、取引追跡などの永続状態を、プロセスメモリまたはローカルファイルに依存させてはならない。必要な整合性モデルを満たす保存先を選択する。
+- `waitUntil` を耐久性のあるジョブ実行と同一視してはならない。取引送信と確定待ちを分離し、失敗、切断、再接続、外部障害から回復可能にする。
+
+理由: 低コストなサーバーレス構成を維持しながら、資産操作に必要な整合性と耐久性を守るため。
+
+### VI. デプロイから削除まで再現可能にする
+
+- リポジトリのルートから、コード生成、ビルド、リソース更新、migration、Bindings、Workers、Pages、動作確認を一貫して実行できる deploy 手順を提供しなければならない。
+- deploy と destroy は stage 単位で動作し、再実行可能でなければならない。途中失敗からの復旧方法を定義する。
+- 作成したリソースの名前、ID、stage、所有範囲を追跡しなければならない。destroy はこのアプリが管理する指定 stage のリソースだけを対象とし、共有リソースや別環境を削除してはならない。
+- 削除順序、保持データ、外部サービス側の設定、削除不能なオンチェーン履歴を README に明記しなければならない。
+
+理由: 教材としての再現性を確保し、クラウド資源の漏れと誤削除を防ぐため。
+
+### VII. 段階的な品質ゲートを通過する
+
+- 作業は、Workers 互換性の技術検証、動作確認用 MVP、全機能と文書の完成という順序で進める。前段の合格条件を満たす前に後段へ進んではならない。
+- 変更は、その範囲に応じて format、lint、型チェック、build、単体テスト、API 契約テスト、統合テスト、E2E テストを通過しなければならない。
+- 認証、認可、ウォレット所有権、ユーザー分離、承認内容の一致、見積期限、冪等性、主要な異常系を受け入れ検証に含めなければならない。
+- mock、dry-run、testnet、mainnet の証拠を区別し、開発と自動テストでは dry-run または利用可能な testnet を優先する。実資産を変更する mainnet 検証は、別途明示された範囲と承認なしに行ってはならない。
+- リリース候補は、ローカル Workers 環境、Cloudflare デプロイ先、README に従った新規環境、deploy 再実行、失敗復旧、destroy 後の残存確認で検証しなければならない。
+
+理由: 安全性、移植性、再現性を、主観ではなく観測可能な合格条件で判定するため。
+
+### VIII. 教材として監査可能な記録を残す
+
+- README、技術ブログ、Spec Kit 成果物は日本語で記述し、想定読者が環境構築、実行、検証、デプロイ、削除まで再現できる内容にしなければならない。
+- 設計判断、採用理由、制約、代替案、外部依存、費用要因、既存コードの再利用範囲、version、license を記録しなければならない。
+- 実行結果、スクリーンショット、計測値は実測後にのみ掲載し、未検証事項を動作確認済みと表現してはならない。
+- アーキテクチャ図と主要フロー図は編集可能な原本と埋め込み可能な形式を保持し、ブラウザ、Cloudflare、外部サービス、認証、署名の境界を示さなければならない。
+
+理由: サンプルを一時的なデモではなく、検証可能で保守可能な学習資産にするため。
+
+## 技術・セキュリティ制約
+
+- Cloudflare Workers を API および Agent の実行基盤、Cloudflare Pages をフロントエンド配信基盤とする。代替への変更は、要件不成立の証拠、比較、移行影響、承認を必要とする。
+- TypeScript、Hono、React、Vite、Strands Agents、Privy、Sera 関連コード、pnpm workspaces、Biome、OpenAPI を基本構成とする。依存を追加または置換する場合は、Workers 互換性、保守状況、license、費用、セキュリティを評価する。
+- すべての通信は HTTPS を使用し、CORS、セキュリティヘッダー、レート制限、タイムアウト、再試行方針を明示する。
+- エラーは期待される失敗とプログラマーエラーを区別し、ユーザー向け情報と運用ログを分離する。ログは相関 ID を持ち、秘密情報と個人情報を含めてはならない。
+- 生成コードと手書きコードの境界を固定し、生成物を直接編集してはならない。
+- 実装は `.agents/rules/` の code-style、security、testing、git-workflow、speckit-language の各規約にも従う。規約が本憲章と競合する場合は本憲章を優先する。
+
+## 開発ワークフローと品質ゲート
+
+1. 仕様化: 各 feature は、ユーザーストーリー、正常系・主要異常系の受け入れ条件、信頼境界、未決事項を日本語の Spec Kit 文書に記録する。
+2. 調査: 外部 SDK、Sera、Privy、Cloudflare の主張を公式資料と対象ソースで確認し、参照 version または commit を固定する。
+3. 計画: 実装前に、API 契約、データ所有者、状態遷移、失敗時の回復、観測方法、deploy・destroy の影響を定義する。
+4. 先行検証: Workers 互換性、署名経路、MCP または直接アダプター、ストリーミング、耐久処理の高リスク項目を最小構成で検証する。
+5. 実装: OpenAPI 契約、共有ドメイン、バックエンド、生成クライアント、フロントエンドの依存順に進め、関係のない変更を混在させない。
+6. 検証: リポジトリ既定のチェックに加え、Vitest、Postman/Newman、Playwright、Workers 実環境のうち変更範囲に必要な検証を実行し、結果を記録する。
+7. レビュー: すべての PR は憲章準拠を確認する。原則からの例外は、理由、範囲、リスク、期限、解消条件を PR と設計文書に明記し、明示承認を得る。
+
+最低リリースゲートは、仕様と実装の追跡可能性、API 契約整合、秘密情報非露出、主要な資産操作の安全性、Workers 上での動作、README の再現性、管理対象リソースの安全な削除である。未実装のテスト基盤は合格扱いにせず、その機能をリリース対象外とするか、先に基盤を追加しなければならない。
+
+## ガバナンス
+
+- 本憲章は、このリポジトリ内の慣例、計画、仕様、実装上の便宜より優先する。
+- 改訂は、変更理由、影響を受ける原則・成果物、移行計画、version 変更根拠を記載した PR により行い、maintainer の明示承認を必要とする。
+- version は Semantic Versioning に従う。原則の削除または互換性のない再定義は MAJOR、原則・セクションの追加または実質的拡張は MINOR、意味を変えない明確化は PATCH とする。
+- 各仕様、計画、タスク、PR、リリースレビューは、該当する憲章原則と検証証拠を示さなければならない。複雑性や例外は、より単純な代替案を退ける根拠を伴わなければならない。
+- 憲章違反が判明した変更は、リリースまたは資産変更操作より前に是正しなければならない。是正不能な場合は、期限付き例外として記録し、資産安全性に関わる I・II の例外は認めない。
+- 運用時の詳細規約は `AGENTS.md`、`.agents/rules/`、`docs/memo.md` を参照する。これらは本憲章を弱める解釈に使用してはならない。
+
+**Version**: 1.0.0 | **制定日**: 2026-09-18 | **最終改訂日**: 2026-09-18
