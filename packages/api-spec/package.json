@@ -2,13 +2,22 @@
   "name": "api-spec",
   "version": "1.0.0",
   "private": true,
-  "description": "",
-  "main": "index.js",
+  "description": "OpenAPI source of truth and generated clients for Sera AI Chatbot",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "lint": "redocly lint openapi.yaml",
+    "generate": "openapi-generator-cli generate -c openapi-generator.json",
+    "diff": "openapi-diff ../../specs/001-sera-ai-chatbot/contracts/openapi.yaml openapi.yaml",
+    "contract": "vitest run src/openapi-contract.test.ts",
+    "test": "pnpm lint && pnpm contract"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "module"
+  "type": "module",
+  "devDependencies": {
+    "@openapitools/openapi-generator-cli": "2.41.0",
+    "@redocly/cli": "2.53.3",
+    "openapi-diff": "0.24.1",
+    "vitest": "5.0.1"
+  }
 }

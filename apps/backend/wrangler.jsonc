@@ -2,7 +2,34 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "backend",
   "main": "src/index.ts",
-  "compatibility_date": "2026-09-18"
+  "compatibility_date": "2026-09-18",
+  "vars": {
+    "STAGE": "local",
+    "NETWORK": "sepolia",
+    "CHAIN_ID": "11155111",
+    "MODEL_ID": "openai/gpt-5.6-terra",
+    "SERA_BASE_URL": "https://api.testnet.sera.example.invalid",
+    "ALLOWED_ORIGIN": "http://127.0.0.1:5173"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sera-ai-db-local",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "workflows": [
+    {
+      "name": "sera-ai-confirmation-local",
+      "binding": "TRANSACTION_TRACKER",
+      "class_name": "TransactionTracker"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
   // "compatibility_flags": [
   //   "nodejs_compat"
   // ],

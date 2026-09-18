@@ -21,16 +21,16 @@ description: "Sera AI チャットボットの依存順・ユーザーストー�
 
 **Purpose**: scaffold を維持したまま、契約生成、テスト、local/remote 検証を実行できる基盤を追加する。
 
-- [ ] T001 root/backend/frontend の runtime・dev dependency を計画の固定 version で追加し `package.json`、`apps/backend/package.json`、`apps/frontend/package.json`、`pnpm-lock.yaml` を更新する
-- [ ] T002 [P] OpenAPI Generator 7.25.0、lint、breaking-diff、typescript-fetch 生成 command を `packages/api-spec/package.json` と `packages/api-spec/openapi-generator.json` に設定する
-- [ ] T003 [P] Workers pool を含む Vitest 設定と共通 test factory を `vitest.workspace.ts`、`apps/backend/vitest.config.ts`、`apps/backend/src/test/factories.ts` に追加する
-- [ ] T004 [P] frontend の Chromium E2E 設定、test project、artifact redaction を `apps/frontend/playwright.config.ts` と `apps/frontend/e2e/fixtures.ts` に追加する
-- [ ] T005 [P] REST contract collection と Newman environment template を `packages/api-spec/postman/sera-ai-chatbot.postman_collection.json` と `packages/api-spec/postman/local.postman_environment.json` に作成する
-- [ ] T006 [P] 計画どおりの backend/frontend/shared/scripts/docs ディレクトリ境界を `apps/backend/src/`、`apps/frontend/src/features/`、`packages/shared/src/`、`scripts/`、`docs/evidence/` に作成する
-- [ ] T007 [P] 公開値と秘密値を分離した local/stage template を `.dev.vars.example`、`apps/frontend/.env.example`、`config/stages/dev.example.json` に定義する
-- [ ] T008 root から test、contract、codegen、spike、deploy、destroy を起動する script entry を `package.json` に追加する
-- [ ] T009 D1、Workflow、AI Gateway/model、Sera URL、RPC、allowed origin の stage bindings を `apps/backend/wrangler.jsonc` に宣言し `apps/backend/worker-configuration.d.ts` を再生成する
-- [ ] T010 generated client、Playwright artifact、secret、resource manifest を追跡対象外にする規則を `.gitignore` と `packages/api-spec/generated/.gitkeep` に追加する
+- [X] T001 root/backend/frontend の runtime・dev dependency を計画の固定 version で追加し `package.json`、`apps/backend/package.json`、`apps/frontend/package.json`、`pnpm-lock.yaml` を更新する
+- [X] T002 [P] OpenAPI Generator 7.25.0、lint、breaking-diff、typescript-fetch 生成 command を `packages/api-spec/package.json` と `packages/api-spec/openapi-generator.json` に設定する
+- [X] T003 [P] Workers pool を含む Vitest 設定と共通 test factory を `vitest.workspace.ts`、`apps/backend/vitest.config.ts`、`apps/backend/src/test/factories.ts` に追加する
+- [X] T004 [P] frontend の Chromium E2E 設定、test project、artifact redaction を `apps/frontend/playwright.config.ts` と `apps/frontend/e2e/fixtures.ts` に追加する
+- [X] T005 [P] REST contract collection と Newman environment template を `packages/api-spec/postman/sera-ai-chatbot.postman_collection.json` と `packages/api-spec/postman/local.postman_environment.json` に作成する
+- [X] T006 [P] 計画どおりの backend/frontend/shared/scripts/docs ディレクトリ境界を `apps/backend/src/`、`apps/frontend/src/features/`、`packages/shared/src/`、`scripts/`、`docs/evidence/` に作成する
+- [X] T007 [P] 公開値と秘密値を分離した local/stage template を `.dev.vars.example`、`apps/frontend/.env.example`、`config/stages/dev.example.json` に定義する
+- [X] T008 root から test、contract、codegen、spike、deploy、destroy を起動する script entry を `package.json` に追加する
+- [X] T009 D1、Workflow、AI Gateway/model、Sera URL、RPC、allowed origin の stage bindings を `apps/backend/wrangler.jsonc` に宣言し `apps/backend/worker-configuration.d.ts` を再生成する
+- [X] T010 generated client、Playwright artifact、secret、resource manifest を追跡対象外にする規則を `.gitignore` と `packages/api-spec/generated/.gitkeep` に追加する
 
 **Checkpoint**: 全開発 command が root から起動でき、秘密値を commit せず次の blocking phase を開始できる。
 
