@@ -1,0 +1,11 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+allowBuilds:
+  core-js-pure: true
+  esbuild: true
+  workerd: true
+
+minimumReleaseAgeExclude:
+  - knip@6.33.0
