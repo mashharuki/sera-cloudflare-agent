@@ -1,0 +1,659 @@
+openapi: 3.0.3
+info:
+  title: Sera AI Chatbot API
+  version: 0.1.0
+  description: |
+    Privy で認証された利用者向けの Sera AI チャットボット契約。
+    OpenAPI Generator 7.25.0 の typescript-fetch client を生成対象とする。
+servers:
+  - url: https://sera-ai-api-{stage}.workers.dev
+    variables:
+      stage:
+        default: dev
+security:
+  - privyBearer: []
+tags:
+  - name: system
+  - name: wallet
+  - name: market
+  - name: chat
+  - name: transaction
+paths:
+  /v1/health:
+    get:
+      tags: [system]
+      operationId: getHealth
+      security: []
+      responses:
+        '200':
+          description: Worker は request を受け付けられる
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+  /v1/capabilities:
+    get:
+      tags: [system]
+      operationId: getCapabilities
+      responses:
+        '200':
+          description: runtime で確認済みの network/token/market/operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Capabilities'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/wallets/me:
+    get:
+      tags: [wallet]
+      operationId: getMyWallet
+      responses:
+        '200':
+          description: 認証利用者が所有する wallet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wallet'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      tags: [wallet]
+      operationId: registerMyWallet
+      description: Privy で作成済みの embedded wallet を検証し、所有関係を同期する。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterWalletRequest'
+      responses:
+        '200':
+          description: 既存 wallet を返した
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wallet'
+        '201':
+          description: ownership projection を作成した
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wallet'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/wallets/me/balances:
+    get:
+      tags: [wallet]
+      operationId: getMyBalances
+      responses:
+        '200':
+          description: Sera から取得した残高
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceList'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/markets:
+    get:
+      tags: [market]
+      operationId: listMarkets
+      parameters:
+        - name: symbol
+          in: query
+          schema:
+            type: string
+            example: JPYC/USDC
+        - name: includeSyntheticDepth
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: 市場と、要求時のみ quote-based synthetic depth
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, fetchedAt, source]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Market'
+                  fetchedAt:
+                    type: string
+                    format: date-time
+                  source:
+                    type: string
+                    enum: [SERA]
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/conversations:
+    post:
+      tags: [chat]
+      operationId: createConversation
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                  maxLength: 120
+      responses:
+        '201':
+          description: conversation を作成した
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Conversation'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/conversations/{conversationId}:
+    get:
+      tags: [chat]
+      operationId: getConversation
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+      responses:
+        '200':
+          description: 自分の conversation と messages
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationDetail'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/conversations/{conversationId}/messages:
+    post:
+      tags: [chat]
+      operationId: createMessageRun
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: string
+                  minLength: 1
+                  maxLength: 20000
+      responses:
+        '202':
+          description: Agent run を受け付けた
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentRun'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/agent-runs/{runId}:
+    get:
+      tags: [chat]
+      operationId: getAgentRun
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: run の durable status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentRun'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/agent-runs/{runId}/events:
+    get:
+      tags: [chat]
+      operationId: streamAgentRunEvents
+      description: 詳細 wire contract は `sse-events.md`。`Last-Event-ID` または after で再開する。
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+        - name: after
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+        - name: Last-Event-ID
+          in: header
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Server-Sent Events
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-cache
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/transaction-proposals:
+    post:
+      tags: [transaction]
+      operationId: createTransactionProposal
+      description: deterministic service が Sera quote/build を検証して承認対象を固定する。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProposalRequest'
+      responses:
+        '201':
+          description: 承認待ち proposal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionProposal'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/transaction-proposals/{proposalId}:
+    get:
+      tags: [transaction]
+      operationId: getTransactionProposal
+      parameters:
+        - $ref: '#/components/parameters/ProposalId'
+      responses:
+        '200':
+          description: 自分の proposal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionProposal'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/transaction-proposals/{proposalId}/approval-request:
+    post:
+      tags: [transaction]
+      operationId: createApprovalRequest
+      description: owner/hash/version/expiry を再検証して、client が署名する exact payload を返す。
+      parameters:
+        - $ref: '#/components/parameters/ProposalId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [proposalVersion, proposalHash]
+              properties:
+                proposalVersion:
+                  type: integer
+                  minimum: 1
+                proposalHash:
+                  $ref: '#/components/schemas/Hash'
+      responses:
+        '200':
+          description: 署名対象
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalRequest'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '410':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/transaction-proposals/{proposalId}/execute:
+    post:
+      tags: [transaction]
+      operationId: executeTransactionProposal
+      description: 同じ idempotency key は同じ Operation を返す。broadcast の winner は最大1 request。
+      parameters:
+        - $ref: '#/components/parameters/ProposalId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteProposalRequest'
+      responses:
+        '202':
+          description: 送信または追跡を受け付けた
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '410':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/operations/{operationId}:
+    get:
+      tags: [transaction]
+      operationId: getOperation
+      parameters:
+        - $ref: '#/components/parameters/OperationId'
+      responses:
+        '200':
+          description: 検証可能な根拠を持つ operation status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/operations/{operationId}/recheck:
+    post:
+      tags: [transaction]
+      operationId: recheckOperation
+      parameters:
+        - $ref: '#/components/parameters/OperationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: 再 broadcast せず確認 Workflow を開始または既存 run を返す
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+        default:
+          $ref: '#/components/responses/Problem'
+components:
+  securitySchemes:
+    privyBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: Privy access token
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 128
+    ConversationId:
+      name: conversationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    RunId:
+      name: runId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ProposalId:
+      name: proposalId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    OperationId:
+      name: operationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    Problem:
+      description: RFC 9457 compatible error。secret、token、upstream raw body を含めない。
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    Health:
+      type: object
+      required: [status, time, version]
+      properties:
+        status: { type: string, enum: [ok] }
+        time: { type: string, format: date-time }
+        version: { type: string }
+    Hash:
+      type: string
+      pattern: '^0x[0-9a-fA-F]{64}$'
+    EvmAddress:
+      type: string
+      pattern: '^0x[0-9a-fA-F]{40}$'
+    DecimalInteger:
+      type: string
+      pattern: '^(0|[1-9][0-9]*)$'
+    Problem:
+      type: object
+      required: [type, title, status, code, correlationId]
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer, minimum: 400, maximum: 599 }
+        detail: { type: string }
+        instance: { type: string, format: uri-reference }
+        code: { type: string, pattern: '^[A-Z0-9_]+$' }
+        correlationId: { type: string }
+        retryable: { type: boolean, default: false }
+    Capabilities:
+      type: object
+      required: [network, chainId, tokens, markets, operations, fetchedAt, expiresAt]
+      properties:
+        network: { type: string, enum: [SEPOLIA] }
+        chainId: { type: integer, enum: [11155111] }
+        tokens:
+          type: array
+          items: { $ref: '#/components/schemas/Token' }
+        markets:
+          type: array
+          items: { type: string, example: JPYC/USDC }
+        operations:
+          type: array
+          items: { type: string, enum: [BALANCE, MARKET, SYNTHETIC_DEPTH, ORDER_HISTORY, SWAP, TRANSFER, STATUS] }
+        fetchedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+    Token:
+      type: object
+      required: [address, symbol, decimals]
+      properties:
+        address: { $ref: '#/components/schemas/EvmAddress' }
+        symbol: { type: string, minLength: 1, maxLength: 16 }
+        decimals: { type: integer, minimum: 0, maximum: 255 }
+    Wallet:
+      type: object
+      required: [id, address, chainId, network, walletType, verifiedAt]
+      properties:
+        id: { type: string, format: uuid }
+        address: { $ref: '#/components/schemas/EvmAddress' }
+        chainId: { type: integer, enum: [11155111] }
+        network: { type: string, enum: [SEPOLIA] }
+        walletType: { type: string, enum: [PRIVY_EMBEDDED_USER_OWNED] }
+        verifiedAt: { type: string, format: date-time }
+    RegisterWalletRequest:
+      type: object
+      required: [privyWalletId, address, chainId]
+      properties:
+        privyWalletId: { type: string, minLength: 1, maxLength: 256 }
+        address: { $ref: '#/components/schemas/EvmAddress' }
+        chainId: { type: integer, enum: [11155111] }
+    BalanceList:
+      type: object
+      required: [items, fetchedAt, source]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [token, amountRaw, amount]
+            properties:
+              token: { $ref: '#/components/schemas/Token' }
+              amountRaw: { $ref: '#/components/schemas/DecimalInteger' }
+              amount: { type: string, pattern: '^[0-9]+(\.[0-9]+)?$' }
+        fetchedAt: { type: string, format: date-time }
+        source: { type: string, enum: [SERA] }
+    Market:
+      type: object
+      required: [symbol, base, quote, informationKind]
+      properties:
+        symbol: { type: string, example: JPYC/USDC }
+        base: { $ref: '#/components/schemas/Token' }
+        quote: { $ref: '#/components/schemas/Token' }
+        informationKind: { type: string, enum: [MARKET_METADATA, QUOTE, SYNTHETIC_DEPTH] }
+        depth:
+          type: array
+          description: authoritative order book ではなく quote-based estimate
+          items:
+            type: object
+            required: [side, inputAmountRaw, outputAmountRaw, price]
+            properties:
+              side: { type: string, enum: [BID, ASK] }
+              inputAmountRaw: { $ref: '#/components/schemas/DecimalInteger' }
+              outputAmountRaw: { $ref: '#/components/schemas/DecimalInteger' }
+              price: { type: string }
+    Conversation:
+      type: object
+      required: [id, status, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        status: { type: string, enum: [ACTIVE, CLOSED] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ConversationDetail:
+      allOf:
+        - $ref: '#/components/schemas/Conversation'
+        - type: object
+          required: [messages]
+          properties:
+            messages:
+              type: array
+              items:
+                type: object
+                required: [id, role, content, createdAt]
+                properties:
+                  id: { type: string, format: uuid }
+                  role: { type: string, enum: [USER, ASSISTANT, TOOL_SUMMARY, SYSTEM_NOTICE] }
+                  content: { type: string }
+                  createdAt: { type: string, format: date-time }
+    AgentRun:
+      type: object
+      required: [id, conversationId, status, eventsUrl]
+      properties:
+        id: { type: string, format: uuid }
+        conversationId: { type: string, format: uuid }
+        status: { type: string, enum: [QUEUED, STREAMING, COMPLETED, FAILED, CANCELLED] }
+        eventsUrl: { type: string, format: uri-reference }
+        errorCode: { type: string }
+    CreateProposalRequest:
+      oneOf:
+        - $ref: '#/components/schemas/CreateSwapProposalRequest'
+        - $ref: '#/components/schemas/CreateTransferProposalRequest'
+      discriminator:
+        propertyName: kind
+    CreateSwapProposalRequest:
+      type: object
+      required: [kind, inputTokenAddress, outputTokenAddress, inputAmountRaw, maxSlippageBps]
+      properties:
+        kind: { type: string, enum: [SWAP] }
+        inputTokenAddress: { $ref: '#/components/schemas/EvmAddress' }
+        outputTokenAddress: { $ref: '#/components/schemas/EvmAddress' }
+        inputAmountRaw: { $ref: '#/components/schemas/DecimalInteger' }
+        maxSlippageBps: { type: integer, minimum: 0, maximum: 10000 }
+        conversationId: { type: string, format: uuid }
+    CreateTransferProposalRequest:
+      type: object
+      required: [kind, tokenAddress, amountRaw, recipient]
+      properties:
+        kind: { type: string, enum: [TRANSFER] }
+        tokenAddress: { $ref: '#/components/schemas/EvmAddress' }
+        amountRaw: { $ref: '#/components/schemas/DecimalInteger' }
+        recipient: { $ref: '#/components/schemas/EvmAddress' }
+        conversationId: { type: string, format: uuid }
+    TransactionProposal:
+      type: object
+      required: [id, kind, version, proposalHash, network, chainId, fromAddress, summary, expiresAt, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [SWAP, TRANSFER] }
+        version: { type: integer, minimum: 1 }
+        proposalHash: { $ref: '#/components/schemas/Hash' }
+        network: { type: string, enum: [SEPOLIA] }
+        chainId: { type: integer, enum: [11155111] }
+        fromAddress: { $ref: '#/components/schemas/EvmAddress' }
+        summary:
+          type: object
+          additionalProperties: true
+          description: UI 表示用。token、amount、recipient、fee、slippage、quote expiry の固定値を含む。
+        expiresAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+    ApprovalRequest:
+      type: object
+      required: [approvalId, kind, proposalHash, expiresAt, payload]
+      properties:
+        approvalId: { type: string, format: uuid }
+        kind: { type: string, enum: [EIP712_SIGNATURE, PRIVY_REQUEST_SIGNATURE] }
+        proposalHash: { $ref: '#/components/schemas/Hash' }
+        expiresAt: { type: string, format: date-time }
+        payload:
+          type: object
+          additionalProperties: true
+          description: client が表示済み proposal と照合して署名する exact payload
+    ExecuteProposalRequest:
+      type: object
+      required: [approvalId, proposalVersion, proposalHash, authorization]
+      properties:
+        approvalId: { type: string, format: uuid }
+        proposalVersion: { type: integer, minimum: 1 }
+        proposalHash: { $ref: '#/components/schemas/Hash' }
+        authorization:
+          oneOf:
+            - type: object
+              required: [kind, signature]
+              properties:
+                kind: { type: string, enum: [EIP712_SIGNATURE] }
+                signature: { type: string, pattern: '^0x[0-9a-fA-F]+$' }
+            - type: object
+              required: [kind, signature]
+              properties:
+                kind: { type: string, enum: [PRIVY_REQUEST_SIGNATURE] }
+                signature: { type: string, minLength: 1, maxLength: 8192 }
+    Operation:
+      type: object
+      required: [id, proposalId, kind, status, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        proposalId: { type: string, format: uuid }
+        kind: { type: string, enum: [SWAP, TRANSFER] }
+        status:
+          type: string
+          enum: [AWAITING_APPROVAL, SUBMITTING, SUBMITTED, CONFIRMING, SUCCEEDED, FAILED, UNKNOWN]
+        txHash: { $ref: '#/components/schemas/Hash' }
+        seraOrderId: { type: string }
+        lastEvidence:
+          type: object
+          required: [type, checkedAt]
+          properties:
+            type: { type: string, enum: [SERA_RESPONSE, SERA_ORDER, SERA_FILL, RPC_RECEIPT, TIMEOUT] }
+            reference: { type: string }
+            checkedAt: { type: string, format: date-time }
+        failureCode: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
