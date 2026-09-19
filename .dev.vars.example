@@ -4,7 +4,8 @@ PRIVY_APP_SECRET="replace-with-privy-app-secret"
 AI_GATEWAY_TOKEN="replace-with-provider-or-gateway-token"
 RPC_URL="https://sepolia.example.invalid/replace-with-secret-endpoint"
 
-# Optional: required for Sera account balance/treasury tools.
+# Optional: required for authenticated Sera account endpoints such as balances,
+# order/fill reads, and transaction builders.
 # Public discovery, market, and quote operations do not require these values.
 # SERA_API_KEY="replace-with-sera-account-api-key"
 # SERA_API_SECRET="replace-with-sera-account-api-secret"

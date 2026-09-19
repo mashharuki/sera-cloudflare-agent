@@ -13,6 +13,8 @@ export default defineConfig({
     include: [
       resolve(import.meta.dirname, "strands-worker.spike.test.ts"),
       resolve(import.meta.dirname, "idempotency-concurrency.spike.test.ts"),
+      resolve(import.meta.dirname, "sera-public-api.spike.test.ts"),
+      resolve(import.meta.dirname, "sepolia-rpc.spike.test.ts"),
     ],
   },
 });
