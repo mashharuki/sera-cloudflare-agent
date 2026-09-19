@@ -14,8 +14,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "sera-ai-db-local",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_name": "sera-ai-db-dev",
+      "database_id": "4966e172-7025-4777-a476-22164463c941",
       "migrations_dir": "migrations"
     }
   ],
