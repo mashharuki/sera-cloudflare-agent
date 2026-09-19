@@ -5,8 +5,7 @@
   // Local workerd bundled by @cloudflare/vitest-pool-workers 0.22.0 supports up to this date.
   "compatibility_date": "2026-08-22",
   "vars": {
-    "MODEL_ID": "openai/gpt-5.6-terra",
-    "AI_GATEWAY_BASE_URL": "https://api.cloudflare.com/client/v4/accounts/replace-with-account-id/ai/v1",
+    "MODEL_ID": "gemini-2.5-flash",
     "RPC_URL": "https://ethereum-sepolia-rpc.publicnode.com",
     "SERA_NETWORK": "sepolia"
   },

@@ -54,11 +54,11 @@
 
 ## 5. LLM provider と model routing
 
-**Decision**: Cloudflare AI Gateway/AI REST の OpenAI-compatible endpoint を Strands `OpenAIModel` の `baseURL` に設定し、初期 model ID は configurable な `openai/gpt-5.6-terra` とする。日本語、streaming、function/tool call、structured output、abort/error の contract test を通す。
+**Decision**: Strands `OpenAIModel` を使い、Google 公式 OpenAI-compatible endpoint `https://generativelanguage.googleapis.com/v1beta/openai/` を `baseURL` に設定する。Google AI Studio の `GEMINI_API_KEY` で推論し、初期 model ID は configurable な `gemini-2.5-flash` とする。日本語、streaming、function/tool call、structured output、abort/error の contract test を通す。
 
-**Rationale**: AI Gateway は routing/observability/control、model provider は inference という責任分離になる。Strands には `env.AI` 専用 adapter がない。OpenAI-compatible interface は初期統合が最小で、Terra は本用途の tool orchestration と費用の均衡がよい。model ID を binding 化すれば provider/native fallback を安全に比較できる。
+**Rationale**: ユーザー保有の Gemini credit を確実に使い、構成・秘密値・障害点を最小化するため、Cloudflare AI Gateway/Unified Billing を経由しない。Strands の既存 OpenAI adapter と導入済み OpenAI SDK だけで Workers 互換性を維持でき、未承認の第三者 build script を持つ追加 SDK も不要になる。provider latency/error はアプリ側の structured log で観測する。
 
-**Alternatives considered**: Workers AI `@cf/openai/gpt-oss-120b` は候補だが、custom adapter または schema 差分の検証後のみ採用。provider 直結は AI Gateway 障害時の fallback として保持する。
+**Alternatives considered**: Cloudflare AI Gateway/Unified Billing は追加 token・gateway 設定・障害点が増え、Google credit の消費経路も複雑になるため却下。Google native endpoint と `@google/genai` は将来候補だが、依存追加時に第三者 build script の承認が必要になったため現段階では採用しない。Workers AI は Google credit を消費しないため本要件の fallback にはしない。
 
 ## 6. Privy 認証・wallet・署名
 

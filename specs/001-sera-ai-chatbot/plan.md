@@ -14,7 +14,7 @@ Cloudflare Pages 上の React チャット UI と Cloudflare Workers 上の Hono
 
 **Language/Version**: TypeScript 7.0.2（root）、frontend TypeScript 6.0.2、Cloudflare Workers compatibility date `2026-09-18`
 
-**Primary Dependencies**: Hono 4.13.8、React 19.2.8、Vite 8.3.0、`@strands-agents/sdk` 1.18.0（先行検証で固定）、Privy React SDK / `@privy-io/node`（実装時に同一 minor へ固定）、Material UI（accessible component 基盤）、React Bits（装飾的 interaction のみ）、TanStack Query（server state）/ Router（routing）、Zustand（永続化しない UI state のみ）、zod、OpenAPI Generator 7.25.0、Cloudflare AI Gateway、Sera REST API
+**Primary Dependencies**: Hono 4.13.8、React 19.2.8、Vite 8.3.0、`@strands-agents/sdk` 1.18.0（先行検証で固定）、OpenAI SDK 6.45.0（Google AI Studio の OpenAI-compatible endpoint 用）、Privy React SDK / `@privy-io/node`（実装時に同一 minor へ固定）、Material UI（accessible component 基盤）、React Bits（装飾的 interaction のみ）、TanStack Query（server state）/ Router（routing）、Zustand（永続化しない UI state のみ）、zod、OpenAPI Generator 7.25.0、Sera REST API
 
 **Storage**: Cloudflare D1（ユーザー所有関係、会話、承認、冪等性、取引状態、監査イベント）、Cloudflare Workflows（確定待ち）、TanStack Query cache と Zustand/browser memory（表示専用の一時状態）。KV・ローカルファイル・Worker グローバルメモリ・browser persistence は重要状態に使わない
 
@@ -74,7 +74,7 @@ apps/
 │   │   ├── agent/           # request-scoped Strands orchestration/read-only tools
 │   │   ├── auth/            # Privy token verification and ownership
 │   │   ├── domain/          # proposals, approvals, operation state machines
-│   │   ├── infrastructure/  # D1, Sera, Privy, RPC, AI Gateway adapters
+│   │   ├── infrastructure/  # D1, Sera, Privy, RPC, Gemini adapters
 │   │   ├── workflows/       # confirmation polling only
 │   │   └── index.ts
 │   ├── migrations/
@@ -120,7 +120,7 @@ spikes/
 ### Stage B — 成立性 spike（tasks Phase 2、後続作業の blocking gate）
 
 1. `@strands-agents/sdk@1.18.0` を最小 Worker に bundle し、local Wrangler と remote Worker の双方で単一 tool call を stream する。
-2. Cloudflare AI Gateway の OpenAI-compatible endpoint から `openai/gpt-5.6-terra` を呼び、日本語、streaming、structured tool call、abort、provider error を検証する。
+2. Google AI Studio の API key を使い、Google 公式 OpenAI-compatible endpoint から `gemini-2.5-flash` を直接呼ぶ。日本語、streaming、structured tool call、abort、provider error と、課金が Google 側へ帰属することを検証する。
 3. Privy access token 検証、wallet ownership、client-side authorization 付き exact request、同じ idempotency key の並行送信を Sepolia で検証する。
 4. Sera REST の read、quote、EIP-712 swap payload、transfer build/send、orders/fills を Worker fetch から確認する。stdio MCP と `convert_and_send` は使用しない。
 5. SSE を切断・再接続し、D1 の event cursor から重複なく復旧する。2ユーザー並行実行で Agent state と wallet state が混在しないことを確認する。
@@ -174,7 +174,7 @@ spikes/
 - **Balance source**: 利用者 wallet の残高は Sepolia RPC の ERC-20 `balanceOf`（token address/block/source を返す）を正本にする。Sera `/balances` は account credential に紐づく別残高であり、Privy user/wallet との一対一対応を spike で証明できない限り US1 の残高へ使用しない。
 - **Frontend state/UI**: Material UI を semantic/accessibility 基盤、React Bits を装飾、TanStack Query/Router を server state/routing、Zustand を ephemeral UI state に限定し、同一状態を複数 store へ複製しない。
 - **Durability**: D1 が正本、Workflows は broadcast 後の追跡のみ。Durable Objects は D1 の条件付き更新で同時実行要件を満たせないという実測が出た場合のみ追加する。
-- **Model routing**: AI Gateway 経由の configurable model ID。初期値 `openai/gpt-5.6-terra`。provider-native fallback と Workers AI candidate は同じ tool/stream contract test に合格したものだけ有効化する。
+- **Model routing**: Strands `OpenAIModel` と Google AI Studio API key を使い、Google 公式 OpenAI-compatible endpoint へ直接接続する。初期値は configurable な `gemini-2.5-flash`。推論課金は `GEMINI_API_KEY` の Google project に帰属させる。AI Gateway/Unified Billing は導入しない。
 
 ## Risk Register
 

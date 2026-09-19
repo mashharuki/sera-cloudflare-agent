@@ -1,14 +1,14 @@
 # Phase 0 実現可能性エビデンス
 
 **計測日時**: 2026-09-19 (JST)  
-**対象 commit**: `3a8b17c6b6b51cb9379fe8974d5eb3a733c8f179` + 作業ツリー
+**対象 commit**: `4b113e4a46dfe7c9ab6b92447d5c34b9c4460b69` + 作業ツリー
 
 この文書は後続実装を開始してよいかを決める blocking gate である。`T011`〜`T016` がすべて `PASS` になるまで Phase 3 以降へ進まない。
 
 | Task | Status | 実測・判断 |
 |---|---|---|
-| T011 | PASS | `@strands-agents/sdk@1.18.0` default export と `OpenAIModel` を `nodejs_compat` なしで bundle。2,837,960 bytes、gzip 523,389 bytes。local workerd で direct tool call と SSE progress/result を確認。静的 bundle に `node:` import は0件。 |
-| T012 | NOT_RUN | Cloudflare AI REST 用の最小権限 token または provider credential が未設定。日本語、stream、tool call、abort、provider error は未実測。 |
+| T011 | PASS | `@strands-agents/sdk@1.18.0` default export と `OpenAIModel` を `nodejs_compat` なしで bundle。2,839,620 bytes、gzip 523,911 bytes。local workerd で direct tool call と SSE progress/result を確認。静的 bundle に `node:` import は0件。 |
+| T012 | PARTIAL | `GEMINI_API_KEY` を使い Google 公式 OpenAI-compatible endpoint から `gemini-2.5-flash` を直接呼び、Strands 経由の日本語 stream と structured `add` tool call（結果42）を確認。Gemini stream に欠ける tool-call `index` は専用 fetch adapter で正規化し unit test 済み。remote Worker での abort、provider error、Google 側の利用量計上確認は未実測。 |
 | T013 | NOT_RUN | Privy app、テスト user-owned wallet、access token、client authorization signature が未設定。Sepolia 送信は未実測。 |
 | T014 | PARTIAL | local workerd からSepolia RPCのchain ID/block/ERC-20 `balanceOf` と、credentialなしのSera config/tokens/markets/quoteを取得してZod validation。Seraはchain ID `11155111`、token 117件、market 6,786件。Quoteは認証エラーではなく `no_liquidity` のbusiness rejectionまで到達。Sera account balances、orders/fills、transfer build、Privy wallet/account mappingは未実測で、これらauthenticated account endpointには `SERA_API_KEY` と `SERA_API_SECRET` が必要。 |
 | T015 | NOT_RUN | remote Worker URL と remote D1 が未作成。60秒超 SSE、再開、terminal replay、2-user isolation は未実測。 |
@@ -21,7 +21,7 @@
 - Vitest: `4.1.11`
 - Wrangler dry-run: `4.134.0`
 - local workerd compatibility date: `2026-08-22`（同梱 workerd の上限。deployable 本体は `2026-09-18`）
-- local runner: 12,296 ms、peak RSS 63,584 KiB（runner process の値であり isolate memory ではない）
+- local runner: 10,013 ms、peak RSS 62,976 KiB（runner process の値であり isolate memory ではない）
 
 ## Sepolia RPC
 
@@ -43,7 +43,7 @@
 
 ## Fallback 判断
 
-- T012 不合格時: Cloudflare REST + Strands OpenAI adapter を停止し、同一 contract test を通した Workers AI custom adapter または provider-native endpoint を再評価する。
+- T012 不合格時: Google 公式 OpenAI-compatible endpoint を停止し、同じ contract test を通す provider-native custom adapter を実装して再検証する。
 - T013 不合格時: server broadcast を禁止し、client wallet direct send + transaction hash reporting へ再計画する。
 - T014 不合格時: 該当 capability を未対応として資産変更を開始しない。
 - T015 不合格時: SSE/D1 event model を再設計し、再開保証を満たすまでチャット実装を開始しない。

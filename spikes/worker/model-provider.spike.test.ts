@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   expectJsonResponse,
   getRemoteUrl,
-  getRequiredEnvironment,
   remoteWorkerUrl,
 } from "./remote-fixture";
 
@@ -13,17 +12,16 @@ type ModelSpikeResponse = {
   toolResult?: { sum: number };
 };
 
-const isEnabled = Boolean(remoteWorkerUrl && process.env.AI_GATEWAY_TOKEN);
+const isEnabled = Boolean(remoteWorkerUrl && process.env.GEMINI_API_KEY);
 
 function getHeaders(): Record<string, string> {
   return {
     "content-type": "application/json",
-    "x-ai-gateway-token": getRequiredEnvironment("AI_GATEWAY_TOKEN"),
   };
 }
 
 describe.skipIf(!isEnabled)("remote model provider", () => {
-  it("should stream Japanese text through openai/gpt-5.6-terra", async () => {
+  it("should stream Japanese text through Gemini", async () => {
     const response = await fetch(getRemoteUrl("/__spike/model"), {
       method: "POST",
       headers: getHeaders(),

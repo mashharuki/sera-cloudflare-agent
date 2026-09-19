@@ -5,11 +5,11 @@
 ## 1. Prerequisites
 
 - Node.js / pnpm（root `packageManager` に従う）
-- Cloudflare account と、Workers Scripts / Pages / D1 / Workflows / Workers AI または AI Gateway に必要な最小権限 token
+- Cloudflare account と、Workers Scripts / Pages / D1 / Workflows に必要な最小権限 token
 - Privy app（embedded Ethereum wallet、許可 origin、Sepolia）
 - Sera public API は credential 不要。Sera account の残高、注文・約定履歴、transaction builder 等を有効化して検証する場合のみ testnet account と API key/secret
 - Sepolia RPC endpoint と test token（JPYC/USDC）
-- OpenAI/provider credential または Cloudflare AI billing configuration
+- Google AI Studio API key（課金・credit 消費用）
 - 実資産を使わないこと。MVP の write test は Sepolia のみ
 
 ## 2. Configuration inventory
@@ -22,9 +22,19 @@
 | Privy app secret/verification config | Worker Secret/Binding | yes |
 | `SERA_NETWORK=sepolia` | Worker vars | no（公式 testnet URL は `sera-mcp` が解決） |
 | Sera API key/secret | Worker Secret | yes（authenticated account endpoint を有効化する場合のみ） |
-| provider/API Gateway token | Worker Secret | yes |
+| `GEMINI_API_KEY` | Worker Secret | yes（Google AI Studio の推論課金・credit 消費） |
 | D1 database, Workflow, AI binding | `wrangler.jsonc` stage config | resource ID は manifest と照合 |
 | model ID, allowed origin | Worker vars | no（stage ごと固定） |
+
+local では `apps/backend/.dev.vars.example` を `apps/backend/.dev.vars` へコピーし、Google AI Studio で発行した API key を `GEMINI_API_KEY` に設定する。既存の `.dev.vars` がある場合は上書きせず、この1行だけを追加する。
+
+deploy 環境では秘密値を設定ファイルへ書かず、対象stageに対して次を実行する。
+
+```bash
+pnpm backend exec wrangler secret put GEMINI_API_KEY
+```
+
+`GEMINI_API_KEY` が Google の推論課金・credit 消費先を決める。LLM 通信は Google AI Studio へ直接送信し、Cloudflare AI Gateway は使用しない。
 
 ## 3. Baseline checks
 
@@ -68,7 +78,7 @@ pnpm spike:concurrency --stage dev
 
 1. Strands Agent が request ごとに作られ、日本語 streaming と1回以上の structured tool call を完了する。
 2. bundle/runtime に `child_process`、stdio、native SQLite、persistent `fs` の依存がない。
-3. `openai/gpt-5.6-terra` の stream、tool call、abort、provider error が schema 通り処理される。
+3. `gemini-2.5-flash` の stream、tool call、abort、provider error が schema 通り処理され、Google 側の利用量へ計上される。
 4. Privy access token と wallet owner が Worker で検証され、exact request authorization の payload hash が UI 表示と一致する。
 5. Sepolia RPC の ERC-20 `balanceOf` が Privy wallet address・token address・block と対応し、Sera testnet の tokens/markets/quote、Sera account `/balances`、transfer preparation が Worker fetch で zod validation を通る。Privy wallet と Sera account の対応を証明できない場合、両残高を分離したままにする。
 6. 同じ approval/idempotency key を20並行送信して、application と upstream の broadcast 観測回数が最大1。
@@ -163,7 +173,7 @@ pnpm inventory --stage dev
 
 - dry-run は exact name/id/account、削除順、保持対象を表示する。
 - manifest と live resource が不一致なら fail closed。
-- dev の Pages、Worker/Workflow、D1 だけが削除され、他 stage、共有 AI Gateway、Privy app、Sera account、RPC project は残る。
+- dev の Pages、Worker/Workflow、D1 だけが削除され、他 stage、Privy app、Sera account、RPC project は残る。
 - on-chain transaction/history は削除できないことが明示される。
 - 途中失敗後の再実行で残存 resource の削除へ収束する。
 

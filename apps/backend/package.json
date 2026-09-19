@@ -11,6 +11,8 @@
     "test:watch": "vitest --config vitest.config.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "@opentelemetry/api": "1.9.0",
     "@privy-io/node": "0.34.0",
     "@strands-agents/sdk": "1.18.0",
     "hono": "^4.13.8",

@@ -2,6 +2,8 @@ import { Agent, type ToolResultBlock, tool } from "@strands-agents/sdk";
 import { OpenAIModel } from "@strands-agents/sdk/models/openai";
 import { z } from "zod";
 
+import { createGeminiOpenAiFetch } from "./gemini-openai-fetch";
+
 const requestSchema = z.object({
   left: z.number(),
   right: z.number(),
@@ -18,8 +20,11 @@ const modelRequestSchema = z.object({
   right: z.number().optional(),
 });
 
+const geminiOpenAiBaseUrl =
+  "https://generativelanguage.googleapis.com/v1beta/openai/";
+
 type SpikeEnv = {
-  AI_GATEWAY_BASE_URL: string;
+  GEMINI_API_KEY: string;
   MODEL_ID: string;
   RPC_URL: string;
   SERA_NETWORK: string;
@@ -130,19 +135,21 @@ async function runModelSpike(
   env: SpikeEnv,
 ): Promise<Response> {
   const parsed = modelRequestSchema.safeParse(await request.json());
-  const token = request.headers.get("x-ai-gateway-token");
-  if (!parsed.success || !token) {
+  if (!parsed.success) {
     return Response.json({ error: "invalid_request" }, { status: 400 });
   }
 
   const model = new OpenAIModel({
     api: "chat",
-    apiKey: token,
-    clientConfig: { baseURL: env.AI_GATEWAY_BASE_URL },
+    apiKey: env.GEMINI_API_KEY,
+    clientConfig: {
+      baseURL: geminiOpenAiBaseUrl,
+      fetch: createGeminiOpenAiFetch(),
+    },
     maxTokens: 256,
     modelId:
       parsed.data.scenario === "provider-error"
-        ? "openai/invalid-spike-model"
+        ? "invalid-spike-model"
         : env.MODEL_ID,
   });
   const agent = new Agent({

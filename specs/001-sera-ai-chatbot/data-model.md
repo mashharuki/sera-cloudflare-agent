@@ -263,7 +263,7 @@ D1 table ではなく `.deploy/state/{stage}.json`（gitignore、secret-free）�
 | `resources[]` | object | kind/name/id/managed/createdAt |
 | `lastDeployCommit` | git SHA | required after deploy |
 
-**Invariant**: destroy は `managed: true` かつ live name/id/account が一致する resource のみ削除する。共有 AI Gateway、Privy app、Sera account、RPC project、オンチェーン履歴は manifest の削除対象にしない。
+**Invariant**: destroy は `managed: true` かつ live name/id/account が一致する resource のみ削除する。Privy app、Google AI Studio project、Sera account、RPC project、オンチェーン履歴は manifest の削除対象にしない。
 
 ## Retention と cleanup
 

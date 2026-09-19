@@ -29,7 +29,7 @@ description: "Sera AI チャットボットの依存順・ユーザーストー�
 - [X] T006 [P] 計画どおりの backend/frontend/shared/scripts/docs ディレクトリ境界を `apps/backend/src/`、`apps/frontend/src/features/`、`packages/shared/src/`、`scripts/`、`docs/evidence/` に作成する
 - [X] T007 [P] 公開値と秘密値を分離した local/stage template を `.dev.vars.example`、`apps/frontend/.env.example`、`config/stages/dev.example.json` に定義する
 - [X] T008 root から test、contract、codegen、spike、deploy、destroy を起動する script entry を `package.json` に追加する
-- [X] T009 D1、Workflow、AI Gateway/model、Sera URL、RPC、allowed origin の stage bindings を `apps/backend/wrangler.jsonc` に宣言し `apps/backend/worker-configuration.d.ts` を再生成する
+- [X] T009 D1、Workflow、Gemini model、Sera URL、RPC、allowed origin の stage bindings を `apps/backend/wrangler.jsonc` に宣言し `apps/backend/worker-configuration.d.ts` を再生成する
 - [X] T010 generated client、Playwright artifact、secret、resource manifest を追跡対象外にする規則を `.gitignore` と `packages/api-spec/generated/.gitkeep` に追加する
 
 **Checkpoint**: 全開発 command が root から起動でき、秘密値を commit せず次の blocking phase を開始できる。
@@ -43,7 +43,7 @@ description: "Sera AI チャットボットの依存順・ユーザーストー�
 **⚠️ CRITICAL**: この phase がすべて PASS するまで `apps/backend/src/` の本番 service/domain 実装と User Story phase を開始しない。
 
 - [X] T011 `@strands-agents/sdk` browser/default export の local Worker bundle、tool call、stream test を `spikes/worker/strands-worker.ts` と `spikes/worker/strands-worker.spike.test.ts` に作成して Node-only import がないことを確認する
-- [ ] T012 [P] `openai/gpt-5.6-terra` の日本語、stream、structured tool call、abort、provider error の remote test を `spikes/worker/model-provider.spike.test.ts` に作成する
+- [ ] T012 [P] Google AI Studio API key と Google 公式 OpenAI-compatible endpoint を使う `gemini-2.5-flash` の日本語、stream、structured tool call、abort、provider error、Google 側の利用量計上の remote test を `spikes/worker/model-provider.spike.test.ts` に作成する
 - [ ] T013 [P] Privy token/ownership、EIP-712、exact request authorization、同一 idempotency key の挙動を Sepolia で検証する test を `spikes/worker/privy-signing.spike.test.ts` に作成する
 - [ ] T014 [P] Sepolia RPC ERC-20 `balanceOf` と Sera testnet の config/tokens/markets/account balances/quote/orders/fills/transfer build を Worker fetch から検証し、Privy wallet と Sera account の対応可否を `spikes/worker/external-apis.spike.test.ts` に記録する
 - [ ] T015 [P] SSE 60秒超、切断再開、terminal replay、2-user state isolation を remote Worker で検証する test を `spikes/worker/sse-isolation.spike.test.ts` に作成する
@@ -77,7 +77,7 @@ description: "Sera AI チャットボットの依存順・ユーザーストー�
 - [ ] T034 [P] Sepolia chain ID 固定、ERC-20 `balanceOf`、receipt schema、block/source、timeout を持つ JSON-RPC port を `apps/backend/src/infrastructure/ethereum/rpc-client.ts` と `apps/backend/src/infrastructure/ethereum/rpc-client.test.ts` に実装する
 - [ ] T035 Conversation、Message、AgentRun、AgentEvent の user-scoped repository と event seq 排他を `apps/backend/src/infrastructure/d1/conversation-repository.ts` と `apps/backend/src/infrastructure/d1/conversation-repository.test.ts` に実装する
 - [ ] T036 request ごとに Agent を生成し global mutable state を持たない Strands runtime factory を `apps/backend/src/agent/runtime.ts` と `apps/backend/src/agent/runtime.test.ts` に実装する
-- [ ] T037 Cloudflare AI Gateway の OpenAI-compatible base URL、configurable model ID、abort/error mapping を `apps/backend/src/agent/model-provider.ts` と `apps/backend/src/agent/model-provider.test.ts` に実装する
+- [ ] T037 Strands `OpenAIModel`、Google 公式 OpenAI-compatible base URL、Google API key、configurable model ID、abort/error mapping を `apps/backend/src/agent/model-provider.ts` と `apps/backend/src/agent/model-provider.test.ts` に実装する
 - [ ] T038 seq replay、`Last-Event-ID`、UTF-8 delta、heartbeat、terminal event を扱う SSE writer を `apps/backend/src/api/sse.ts` と `apps/backend/src/api/sse.test.ts` に実装する
 - [ ] T039 health、capabilities、conversation/message/run/event の contract routes と zod boundary を `apps/backend/src/api/system-routes.ts`、`apps/backend/src/api/chat-routes.ts`、`apps/backend/src/index.ts` に実装する
 - [ ] T040 generated client に Privy bearer、Idempotency-Key、Problem mapping を付ける wrapper を `apps/frontend/src/lib/api/client.ts` と `apps/frontend/src/lib/api/client.test.ts` に実装する
@@ -272,7 +272,7 @@ description: "Sera AI チャットボットの依存順・ユーザーストー�
 - [ ] T133 [US6] `dev:setup`、`deploy`、`destroy`、`inventory`、`smoke` command と stage argument validation を `package.json` に接続する
 - [ ] T134 [P] [US6] 目的、US1〜US5、architecture、前提、権限、設定、local、test、deploy、recovery、destroy、費用、制約、参照元を日本語で `README.md` に記述する
 - [ ] T135 [P] [US6] 採用理由、Sera再利用境界、Agent/asset責任分離、Privy署名、Workers適応、deploy/destroy、課題、実測を `docs/blog.md` に記述する
-- [ ] T136 [P] [US6] browser/Pages/Worker/D1/Workflow/AI Gateway/Privy/Sera/RPC の信頼境界を `docs/architecture/system.drawio` に作図する
+- [ ] T136 [P] [US6] browser/Pages/Worker/D1/Workflow/Gemini/Privy/Sera/RPC の信頼境界を `docs/architecture/system.drawio` に作図する
 - [ ] T137 [P] [US6] 認証・wallet ownership・署名境界を `docs/architecture/auth-wallet.drawio` に作図する
 - [ ] T138 [P] [US6] 残高と市場照会の read-only flow を `docs/architecture/balance.drawio` と `docs/architecture/market-query.drawio` に作図する
 - [ ] T139 [P] [US6] proposal/approval/sign/idempotent submit を含む swap/transfer flow を `docs/architecture/swap.drawio` と `docs/architecture/transfer.drawio` に作図する

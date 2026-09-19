@@ -7,7 +7,7 @@
     "STAGE": "local",
     "NETWORK": "sepolia",
     "CHAIN_ID": "11155111",
-    "MODEL_ID": "openai/gpt-5.6-terra",
+    "MODEL_ID": "gemini-2.5-flash",
     "SERA_NETWORK": "sepolia",
     "ALLOWED_ORIGIN": "http://127.0.0.1:5173"
   },

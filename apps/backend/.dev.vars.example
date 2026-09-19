@@ -1,7 +1,7 @@
 # Copy to apps/backend/.dev.vars for local development. Never commit real values.
 PRIVY_APP_ID="replace-with-privy-app-id"
 PRIVY_APP_SECRET="replace-with-privy-app-secret"
-AI_GATEWAY_TOKEN="replace-with-provider-or-gateway-token"
+GEMINI_API_KEY="replace-with-google-ai-studio-api-key"
 RPC_URL="https://sepolia.example.invalid/replace-with-secret-endpoint"
 
 # Optional: required for authenticated Sera account endpoints such as balances,
