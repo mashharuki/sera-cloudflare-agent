@@ -8,6 +8,17 @@ type ServerEvent = {
   data: { userId: string; terminal?: boolean };
 };
 
+const isEnabled = Boolean(remoteWorkerUrl && process.env.SPIKE_TOKEN);
+
+function getHeaders(lastEventId?: number): Record<string, string> {
+  return {
+    authorization: `Bearer ${process.env.SPIKE_TOKEN ?? ""}`,
+    ...(lastEventId === undefined
+      ? {}
+      : { "last-event-id": String(lastEventId) }),
+  };
+}
+
 async function readEvents(
   responsePromise: Response | Promise<Response>,
   limit = Number.POSITIVE_INFINITY,
@@ -36,22 +47,27 @@ async function readEvents(
   return events;
 }
 
-describe.skipIf(!remoteWorkerUrl)("remote SSE durability and isolation", () => {
+describe.skipIf(!isEnabled)("remote SSE durability and isolation", () => {
   it("should remain open beyond 60 seconds and replay from Last-Event-ID", async () => {
+    const startedAt = Date.now();
     const runId = crypto.randomUUID();
     const url = getRemoteUrl(
       `/__spike/sse?runId=${runId}&userId=user-a&durationMs=65000`,
     );
-    const first = await readEvents(await fetch(url), 2);
+    const first = await readEvents(
+      await fetch(url, { headers: getHeaders() }),
+      2,
+    );
     const lastSeen = first.at(-1)?.id;
     expect(lastSeen).toBeTypeOf("number");
 
     const resumed = await readEvents(
-      await fetch(url, { headers: { "last-event-id": String(lastSeen) } }),
+      await fetch(url, { headers: getHeaders(lastSeen) }),
     );
     expect(resumed[0]?.id).toBe((lastSeen ?? 0) + 1);
     expect(resumed.at(-1)?.data.terminal).toBe(true);
     expect(resumed.every(({ data }) => data.userId === "user-a")).toBe(true);
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(60_000);
   });
 
   it("should isolate concurrent state for two users", async () => {
@@ -63,6 +79,7 @@ describe.skipIf(!remoteWorkerUrl)("remote SSE durability and isolation", () => {
             getRemoteUrl(
               `/__spike/sse?runId=${runId}-${userId}&userId=${userId}`,
             ),
+            { headers: getHeaders() },
           ),
         ),
       ),

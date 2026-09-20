@@ -12,8 +12,12 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "sera-feasibility-spike",
-      "database_id": "00000000-0000-0000-0000-000000000001"
+      "database_name": "sera-ai-db-dev",
+      "database_id": "4966e172-7025-4777-a476-22164463c941"
     }
-  ]
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
 }

@@ -25,6 +25,13 @@ type BundleMeasurement = {
   nodeImportCount: number;
 };
 
+type RemoteProbeMeasurement = {
+  durationMs: number;
+  path: string;
+  status: number;
+  subrequests: number | null;
+};
+
 const repositoryRoot = resolve(import.meta.dirname, "..");
 
 function measureCommand(command: string, args: string[]): CommandMeasurement {
@@ -95,7 +102,28 @@ function measureBundle(): BundleMeasurement {
   }
 }
 
-function run(): void {
+async function measureRemoteProbe(
+  baseUrl: string,
+  path: string,
+): Promise<RemoteProbeMeasurement> {
+  const startedAt = performance.now();
+  const response = await fetch(new URL(path, baseUrl), {
+    redirect: "error",
+  });
+  await response.arrayBuffer();
+  const subrequests = Number.parseInt(
+    response.headers.get("x-spike-subrequests") ?? "",
+    10,
+  );
+  return {
+    durationMs: Math.round(performance.now() - startedAt),
+    path,
+    status: response.status,
+    subrequests: Number.isFinite(subrequests) ? subrequests : null,
+  };
+}
+
+async function run(): Promise<void> {
   const localTests = measureCommand("pnpm", [
     "exec",
     "vitest",
@@ -104,13 +132,22 @@ function run(): void {
     "spikes/worker/vitest.config.ts",
   ]);
   const remoteWorkerUrl = process.env.REMOTE_WORKER_URL;
-  const remoteTests = remoteWorkerUrl
+  const shouldRunRemoteTests = Boolean(
+    remoteWorkerUrl && process.env.SKIP_REMOTE_TESTS !== "true",
+  );
+  const remoteTests = shouldRunRemoteTests
     ? measureCommand("pnpm", [
         "exec",
         "vitest",
         "run",
         "--config",
         "spikes/worker/remote.vitest.config.ts",
+      ])
+    : null;
+  const remoteProbes = remoteWorkerUrl
+    ? await Promise.all([
+        measureRemoteProbe(remoteWorkerUrl, "/__spike/sera-public"),
+        measureRemoteProbe(remoteWorkerUrl, "/__spike/sepolia-rpc"),
       ])
     : null;
 
@@ -126,10 +163,13 @@ function run(): void {
     bundle: measureBundle(),
     localTests,
     remoteTests,
+    remoteProbes,
     remoteWorkerConfigured: Boolean(remoteWorkerUrl),
+    remoteTestsSkipped: Boolean(remoteWorkerUrl && !shouldRunRemoteTests),
     limitations: [
       "maxRssKb is the peak RSS of the local spike runner, not Cloudflare isolate memory.",
-      "CPU, subrequest, startup and remote latency require a deployed Worker with observability enabled.",
+      "Remote CPU and wall time are collected separately from Cloudflare observability logs.",
+      "Reported subrequests are explicit endpoint instrumentation and must match the implementation when probes change.",
     ],
   };
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
@@ -141,4 +181,4 @@ function run(): void {
   }
 }
 
-run();
+await run();

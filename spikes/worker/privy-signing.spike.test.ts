@@ -21,6 +21,16 @@ type PrivySpikeResponse = {
   transactionHash: string;
 };
 
+type PrivyPreflightResponse = {
+  amountWei: string;
+  balanceWei: string;
+  chainId: number;
+  estimatedFeeWei: string;
+  from: string;
+  ownerVerified: boolean;
+  to: string;
+};
+
 describe.skipIf(!isEnabled)("remote Privy signing", () => {
   it("should bind token, owner, EIP-712 and exact request to one idempotent Sepolia action", async () => {
     const body = {
@@ -28,6 +38,20 @@ describe.skipIf(!isEnabled)("remote Privy signing", () => {
       walletId: getRequiredEnvironment("PRIVY_TEST_WALLET_ID"),
       idempotencyKey: `privy-spike-${getRequiredEnvironment("PRIVY_SPIKE_RUN_ID")}`,
     };
+    const preflight = await fetch(getRemoteUrl("/__spike/privy-preflight"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }).then(expectJsonResponse<PrivyPreflightResponse>);
+
+    expect(preflight.ownerVerified).toBe(true);
+    expect(preflight.chainId).toBe(11_155_111);
+    expect(preflight.from).toBe(preflight.to);
+    expect(preflight.amountWei).toBe("0");
+    expect(BigInt(preflight.balanceWei)).toBeGreaterThanOrEqual(
+      BigInt(preflight.estimatedFeeWei),
+    );
+
     const send = () =>
       fetch(getRemoteUrl("/__spike/privy-signing"), {
         method: "POST",

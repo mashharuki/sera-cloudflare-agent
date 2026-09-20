@@ -12,10 +12,11 @@ type ModelSpikeResponse = {
   toolResult?: { sum: number };
 };
 
-const isEnabled = Boolean(remoteWorkerUrl && process.env.GEMINI_API_KEY);
+const isEnabled = Boolean(remoteWorkerUrl && process.env.SPIKE_TOKEN);
 
 function getHeaders(): Record<string, string> {
   return {
+    authorization: `Bearer ${process.env.SPIKE_TOKEN ?? ""}`,
     "content-type": "application/json",
   };
 }

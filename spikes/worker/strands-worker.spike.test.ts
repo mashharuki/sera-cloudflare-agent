@@ -2,6 +2,16 @@ import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
 describe("Strands SDK Worker compatibility", () => {
+  it("should reject model spikes when the bearer secret is unavailable", async () => {
+    const response = await SELF.fetch("https://spike.local/__spike/model", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ scenario: "japanese-stream" }),
+    });
+
+    expect(response.status).toBe(401);
+  });
+
   it("should stream a direct tool call when using the default export", async () => {
     const response = await SELF.fetch("https://spike.local/tool-stream", {
       method: "POST",
