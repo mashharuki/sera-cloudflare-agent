@@ -40,6 +40,10 @@ type SpikeEnv = {
 const privyRequestSchema = z.object({
   accessToken: z.string().min(20),
   idempotencyKey: z.string().regex(/^privy-spike-[a-zA-Z0-9-]{1,80}$/u),
+  walletAddress: z
+    .string()
+    .regex(/^0x[0-9a-f]{40}$/iu)
+    .optional(),
   walletId: z.string().min(1).max(200),
 });
 
@@ -279,22 +283,35 @@ async function getPrivyWalletContext(
   env: SpikeEnv,
   accessToken: string,
   walletId: string,
+  walletAddress?: string,
 ): Promise<PrivyWalletContext | null> {
   const client = createPrivyClient(env);
   if (!client) return null;
   const token = await client.utils().auth().verifyAccessToken(accessToken);
-  for await (const wallet of client
-    .wallets()
-    .list({ user_id: token.user_id })) {
-    if (wallet.id !== walletId || wallet.chain_type !== "ethereum") continue;
-    return {
-      address: wallet.address,
-      client,
-      privyDid: token.user_id,
-      walletId,
-    };
+  const user = await client.users()._get(token.user_id);
+  const account = user.linked_accounts.find(
+    (linkedAccount) =>
+      linkedAccount.type === "wallet" &&
+      linkedAccount.chain_type === "ethereum" &&
+      "id" in linkedAccount &&
+      (linkedAccount.id === walletId ||
+        linkedAccount.address.toLowerCase() === walletAddress?.toLowerCase()) &&
+      linkedAccount.user_can_sign,
+  );
+  if (!account || !("id" in account) || !account.id) return null;
+  const wallet = await client.wallets().get(account.id);
+  if (
+    wallet.chain_type !== "ethereum" ||
+    wallet.address.toLowerCase() !== account.address.toLowerCase()
+  ) {
+    return null;
   }
-  return null;
+  return {
+    address: wallet.address,
+    client,
+    privyDid: token.user_id,
+    walletId: wallet.id,
+  };
 }
 
 function encodeHex(bytes: ArrayBuffer): string {
@@ -321,6 +338,7 @@ async function runPrivyPreflightSpike(
       env,
       parsed.data.accessToken,
       parsed.data.walletId,
+      parsed.data.walletAddress,
     );
     if (!wallet) {
       return Response.json({ error: "wallet_not_owned" }, { status: 403 });
@@ -347,16 +365,28 @@ async function runPrivyPreflightSpike(
   }
 }
 
-const privySpikeCorsHeaders = {
-  "access-control-allow-headers": "content-type",
-  "access-control-allow-methods": "POST, OPTIONS",
-  "access-control-allow-origin": "http://127.0.0.1:5173",
-  "access-control-max-age": "600",
-} as const;
+const privySpikeOrigins = new Set([
+  "http://127.0.0.1:5173",
+  "http://localhost:5173",
+]);
 
-function withPrivySpikeCors(response: Response): Response {
+function createPrivySpikeCorsHeaders(request: Request): Headers {
+  const headers = new Headers({
+    "access-control-allow-headers": "content-type",
+    "access-control-allow-methods": "POST, OPTIONS",
+    "access-control-max-age": "600",
+    vary: "Origin",
+  });
+  const origin = request.headers.get("origin");
+  if (origin && privySpikeOrigins.has(origin)) {
+    headers.set("access-control-allow-origin", origin);
+  }
+  return headers;
+}
+
+function withPrivySpikeCors(request: Request, response: Response): Response {
   const headers = new Headers(response.headers);
-  for (const [name, value] of Object.entries(privySpikeCorsHeaders)) {
+  for (const [name, value] of createPrivySpikeCorsHeaders(request)) {
     headers.set(name, value);
   }
   return new Response(response.body, {
@@ -379,6 +409,7 @@ async function runPrivySigningSpike(
       env,
       parsed.data.accessToken,
       parsed.data.walletId,
+      parsed.data.walletAddress,
     );
     if (!wallet) {
       return Response.json({ error: "wallet_not_owned" }, { status: 403 });
@@ -810,6 +841,7 @@ async function runSeraAccountSpike(
       env,
       parsed.data.accessToken,
       parsed.data.walletId,
+      parsed.data.walletAddress,
     );
     if (!wallet) {
       return Response.json({ error: "wallet_not_owned" }, { status: 403 });
@@ -948,7 +980,7 @@ export default {
     ].includes(url.pathname);
     if (request.method === "OPTIONS" && isPrivySpike) {
       return new Response(null, {
-        headers: privySpikeCorsHeaders,
+        headers: createPrivySpikeCorsHeaders(request),
         status: 204,
       });
     }
@@ -977,16 +1009,25 @@ export default {
       request.method === "POST" &&
       url.pathname === "/__spike/privy-preflight"
     ) {
-      return withPrivySpikeCors(await runPrivyPreflightSpike(request, env));
+      return withPrivySpikeCors(
+        request,
+        await runPrivyPreflightSpike(request, env),
+      );
     }
     if (
       request.method === "POST" &&
       url.pathname === "/__spike/privy-signing"
     ) {
-      return withPrivySpikeCors(await runPrivySigningSpike(request, env));
+      return withPrivySpikeCors(
+        request,
+        await runPrivySigningSpike(request, env),
+      );
     }
     if (request.method === "POST" && url.pathname === "/__spike/sera-account") {
-      return withPrivySpikeCors(await runSeraAccountSpike(request, env));
+      return withPrivySpikeCors(
+        request,
+        await runSeraAccountSpike(request, env),
+      );
     }
     if (request.method !== "POST" || url.pathname !== "/tool-stream") {
       return Response.json({ error: "not_found" }, { status: 404 });

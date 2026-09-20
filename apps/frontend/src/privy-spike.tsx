@@ -62,11 +62,18 @@ function PrivySpike(): React.JSX.Element {
         body: JSON.stringify({
           accessToken,
           idempotencyKey: `privy-spike-${crypto.randomUUID()}`,
+          walletAddress: wallet.address,
           walletId: wallet.id,
         }),
       });
-      if (!response.ok)
+      if (response.status === 403) {
+        throw new Error(
+          "Privyセッションとウォレット所有者が一致しません。ログアウトして再ログインしてください。",
+        );
+      }
+      if (!response.ok) {
         throw new Error(`Preflight failed (${response.status})`);
+      }
       setPreflight(preflightSchema.parse(await response.json()));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Preflight failed");
