@@ -73,6 +73,11 @@ button.secondary {
   background: transparent;
 }
 
+button.danger {
+  border-color: #a63122;
+  background: #a63122;
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.45;

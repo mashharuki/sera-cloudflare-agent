@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sera-strands-worker-spike",
+  "main": "../../spikes/worker/strands-worker.ts",
+  // Keep this aligned with the local workerd version used by the spike tests.
+  "compatibility_date": "2026-08-22",
+  "vars": {
+    "MODEL_ID": "gemini-2.5-flash",
+    "RPC_URL": "https://ethereum-sepolia-rpc.publicnode.com",
+    "SERA_NETWORK": "sepolia"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sera-ai-db-dev",
+      "database_id": "4966e172-7025-4777-a476-22164463c941"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

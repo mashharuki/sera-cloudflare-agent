@@ -44,7 +44,7 @@ description: "Sera AI チャットボットの依存順・ユーザーストー�
 
 - [X] T011 `@strands-agents/sdk` browser/default export の local Worker bundle、tool call、stream test を `spikes/worker/strands-worker.ts` と `spikes/worker/strands-worker.spike.test.ts` に作成して Node-only import がないことを確認する
 - [X] T012 [P] Google AI Studio API key と Google 公式 OpenAI-compatible endpoint を使う `gemini-2.5-flash` の日本語、stream、structured tool call、abort、provider error、Google 側の利用量計上の remote test を `spikes/worker/model-provider.spike.test.ts` に作成する
-- [ ] T013 [P] Privy token/ownership、EIP-712、exact request authorization、同一 idempotency key の挙動を Sepolia で検証する test を `spikes/worker/privy-signing.spike.test.ts` に作成する
+- [X] T013 [P] Privy token/ownership、EIP-712、exact request authorization、同一 idempotency key の挙動を Sepolia で検証する test を `spikes/worker/privy-signing.spike.test.ts` に作成する
 - [ ] T014 [P] Sepolia RPC ERC-20 `balanceOf` と Sera testnet の config/tokens/markets/account balances/quote/orders/fills/transfer build を Worker fetch から検証し、Privy wallet と Sera account の対応可否を `spikes/worker/external-apis.spike.test.ts` に記録する
 - [X] T015 [P] SSE 60秒超、切断再開、terminal replay、2-user state isolation を remote Worker で検証する test を `spikes/worker/sse-isolation.spike.test.ts` に作成する
 - [X] T016 D1 conditional update と20並行 execute で winner が1件になることを検証する test harness を `spikes/worker/idempotency-concurrency.spike.test.ts` に作成する

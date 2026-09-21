@@ -54,6 +54,8 @@ type PrivyWalletContext = {
   walletId: string;
 };
 
+class PrivyOwnerMismatchError extends Error {}
+
 type SseRun = {
   duration_ms: number;
   started_at: number;
@@ -164,6 +166,14 @@ const seraTransactionSchema = z.object({
     maxFeePerGas: z.string().regex(/^0x[0-9a-f]+$/iu),
     maxPriorityFeePerGas: z.string().regex(/^0x[0-9a-f]+$/iu),
   }),
+});
+const seraApiCredentialsSchema = z.object({
+  api_key: z.string().min(1),
+  api_secret: z.string().min(1),
+});
+const seraApiKeyVerificationSchema = z.object({
+  valid: z.literal(true),
+  owner_address: evmAddressSchema,
 });
 
 const seraNetworkUrls = {
@@ -286,9 +296,19 @@ async function getPrivyWalletContext(
   walletAddress?: string,
 ): Promise<PrivyWalletContext | null> {
   const client = createPrivyClient(env);
-  if (!client) return null;
+  if (!client) {
+    console.warn("privy_wallet_context_rejected", {
+      reason: "client_not_configured",
+    });
+    return null;
+  }
   const token = await client.utils().auth().verifyAccessToken(accessToken);
-  const user = await client.users()._get(token.user_id);
+  const user = walletAddress
+    ? await client.users().getByWalletAddress({ address: walletAddress })
+    : await client.users()._get(token.user_id);
+  if (user.id !== token.user_id) {
+    throw new PrivyOwnerMismatchError();
+  }
   const account = user.linked_accounts.find(
     (linkedAccount) =>
       linkedAccount.type === "wallet" &&
@@ -298,12 +318,20 @@ async function getPrivyWalletContext(
         linkedAccount.address.toLowerCase() === walletAddress?.toLowerCase()) &&
       linkedAccount.user_can_sign,
   );
-  if (!account || !("id" in account) || !account.id) return null;
+  if (!account || !("id" in account) || !account.id) {
+    console.warn("privy_wallet_context_rejected", {
+      reason: "signable_linked_wallet_not_found",
+    });
+    return null;
+  }
   const wallet = await client.wallets().get(account.id);
   if (
     wallet.chain_type !== "ethereum" ||
     wallet.address.toLowerCase() !== account.address.toLowerCase()
   ) {
+    console.warn("privy_wallet_context_rejected", {
+      reason: "wallet_metadata_mismatch",
+    });
     return null;
   }
   return {
@@ -360,7 +388,13 @@ async function runPrivyPreflightSpike(
       ownerVerified: true,
       to: wallet.address,
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof PrivyOwnerMismatchError) {
+      return Response.json(
+        { error: "privy_session_owner_mismatch" },
+        { status: 409 },
+      );
+    }
     return Response.json({ error: "privy_preflight_failed" }, { status: 502 });
   }
 }
@@ -404,6 +438,7 @@ async function runPrivySigningSpike(
   if (!parsed.success) {
     return Response.json({ error: "invalid_request" }, { status: 400 });
   }
+  let stage = "wallet_context";
   try {
     const wallet = await getPrivyWalletContext(
       env,
@@ -422,31 +457,35 @@ async function runPrivySigningSpike(
     } as const;
     const requestHash = await hashJson(transaction);
     const authorizationContext = { user_jwts: [parsed.data.accessToken] };
+    stage = "typed_data_signature";
     const typedData = await wallet.client
       .wallets()
       .ethereum()
       .signTypedData(wallet.walletId, {
         authorization_context: authorizationContext,
         idempotency_key: `${parsed.data.idempotencyKey}-typed`,
-        typed_data: {
-          domain: {
-            chainId: 11_155_111,
-            name: "Sera Feasibility",
-            version: "1",
-          },
-          message: {
-            idempotencyKey: parsed.data.idempotencyKey,
-            requestHash,
-          },
-          primary_type: "AuthorizedRequest",
-          types: {
-            AuthorizedRequest: [
-              { name: "requestHash", type: "bytes32" },
-              { name: "idempotencyKey", type: "string" },
-            ],
+        params: {
+          typed_data: {
+            domain: {
+              chainId: 11_155_111,
+              name: "Sera Feasibility",
+              version: "1",
+            },
+            message: {
+              idempotencyKey: parsed.data.idempotencyKey,
+              requestHash,
+            },
+            primary_type: "AuthorizedRequest",
+            types: {
+              AuthorizedRequest: [
+                { name: "requestHash", type: "bytes32" },
+                { name: "idempotencyKey", type: "string" },
+              ],
+            },
           },
         },
       });
+    stage = "transaction_send";
     const sent = await wallet.client
       .wallets()
       .ethereum()
@@ -454,7 +493,7 @@ async function runPrivySigningSpike(
         authorization_context: authorizationContext,
         caip2: "eip155:11155111",
         idempotency_key: `${parsed.data.idempotencyKey}-send`,
-        transaction,
+        params: { transaction },
       });
     return Response.json({
       ownerVerified: true,
@@ -465,7 +504,12 @@ async function runPrivySigningSpike(
       walletAddress: wallet.address,
       walletId: wallet.walletId,
     });
-  } catch {
+  } catch (error) {
+    console.error("privy_signing_failed", {
+      message: error instanceof Error ? error.message : "unknown_error",
+      name: error instanceof Error ? error.name : typeof error,
+      stage,
+    });
     return Response.json({ error: "privy_signing_failed" }, { status: 502 });
   }
 }
@@ -803,23 +847,33 @@ async function fetchSeraAccountJson<T>(
   if (!env.SERA_API_KEY || !env.SERA_API_SECRET) {
     throw new Error("Sera account credentials are not configured");
   }
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      accept: "application/json",
-      authorization: `Bearer ${env.SERA_API_KEY}:${env.SERA_API_SECRET}`,
-      ...(init?.body ? { "content-type": "application/json" } : {}),
-    },
-    redirect: "manual",
-  });
-  if (!response.ok) {
-    throw new Error(`Sera account API returned HTTP ${response.status}`);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const response = await fetch(url, {
+      ...init,
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${env.SERA_API_KEY}:${env.SERA_API_SECRET}`,
+        ...(init?.body ? { "content-type": "application/json" } : {}),
+      },
+      redirect: "manual",
+    });
+    if (!response.ok) {
+      const isRetryable = response.status === 429 || response.status === 503;
+      if (isRetryable && attempt < 2) {
+        await wait(250 * 2 ** attempt);
+        continue;
+      }
+      throw new Error(
+        `Sera account API ${url.pathname} returned HTTP ${response.status}`,
+      );
+    }
+    const parsed = schema.safeParse(await response.json());
+    if (!parsed.success) {
+      throw new Error("Sera account API response failed schema validation");
+    }
+    return { data: parsed.data, status: response.status };
   }
-  const parsed = schema.safeParse(await response.json());
-  if (!parsed.success) {
-    throw new Error("Sera account API response failed schema validation");
-  }
-  return { data: parsed.data, status: response.status };
+  throw new Error(`Sera account API ${url.pathname} retry exhausted`);
 }
 
 async function runSeraAccountSpike(
@@ -865,11 +919,12 @@ async function runSeraAccountSpike(
         env,
       ),
     ]);
-    const token =
-      balances.data.balances.find(
-        ({ wallet_balance }) => BigInt(wallet_balance) > 0n,
-      ) ?? balances.data.balances[0];
-    if (!token) throw new Error("Sera account returned no whitelisted tokens");
+    const token = balances.data.balances.find(
+      ({ symbol }) => symbol === "USDC" || symbol === "JPYC",
+    );
+    if (!token) {
+      throw new Error("Sera account returned neither USDC nor JPYC");
+    }
     const transfer = await fetchSeraAccountJson(
       new URL(`${baseUrl}/transfer`),
       seraTransactionSchema,
@@ -909,6 +964,189 @@ async function runSeraAccountSpike(
       {
         error: "sera_account_api_unavailable",
         detail: error instanceof Error ? error.message : "unknown error",
+      },
+      { status: 502 },
+    );
+  }
+}
+
+async function createTemporarySeraCredentials(
+  wallet: PrivyWalletContext,
+  accessToken: string,
+  idempotencyKey: string,
+): Promise<z.infer<typeof seraApiCredentialsSchema>> {
+  const baseUrl = seraNetworkUrls.sepolia;
+  const config = await fetchSeraJson(
+    new URL(`${baseUrl}/config`),
+    seraConfigSchema,
+  );
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signed = await wallet.client
+    .wallets()
+    .ethereum()
+    .signTypedData(wallet.walletId, {
+      authorization_context: { user_jwts: [accessToken] },
+      idempotency_key: `${idempotencyKey}-sera-key`,
+      params: {
+        typed_data: {
+          domain: {
+            chainId: config.data.chain_id,
+            name: "Sera",
+            verifyingContract: config.data.sera_address,
+            version: "1",
+          },
+          message: { action: "create", owner: wallet.address, timestamp },
+          primary_type: "ManageApiKey",
+          types: {
+            ManageApiKey: [
+              { name: "owner", type: "address" },
+              { name: "action", type: "string" },
+              { name: "timestamp", type: "uint256" },
+            ],
+          },
+        },
+      },
+    });
+  const response = await fetch(`${baseUrl}/api-keys`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      action: "create",
+      label: "sera-cloudflare-agent T014 temporary",
+      owner_address: wallet.address,
+      signature: signed.signature,
+      timestamp,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`Sera API-key creation returned HTTP ${response.status}`);
+  }
+  return seraApiCredentialsSchema.parse(await response.json());
+}
+
+async function revokeTemporarySeraCredentials(
+  credentials: z.infer<typeof seraApiCredentialsSchema>,
+): Promise<void> {
+  const response = await fetch(
+    `${seraNetworkUrls.sepolia}/api-keys/self-revoke`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${credentials.api_key}:${credentials.api_secret}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ api_key: credentials.api_key }),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`Sera API-key revocation returned HTTP ${response.status}`);
+  }
+}
+
+async function runTemporarySeraAccountSpike(
+  request: Request,
+  env: SpikeEnv,
+): Promise<Response> {
+  const parsed = privyRequestSchema.safeParse(await request.json());
+  if (!parsed.success) {
+    return Response.json({ error: "invalid_request" }, { status: 400 });
+  }
+  let credentials: z.infer<typeof seraApiCredentialsSchema> | null = null;
+  let stage = "wallet_context";
+  try {
+    const wallet = await getPrivyWalletContext(
+      env,
+      parsed.data.accessToken,
+      parsed.data.walletId,
+      parsed.data.walletAddress,
+    );
+    if (!wallet) {
+      return Response.json({ error: "wallet_not_owned" }, { status: 403 });
+    }
+    stage = "api_key_creation";
+    credentials = await createTemporarySeraCredentials(
+      wallet,
+      parsed.data.accessToken,
+      parsed.data.idempotencyKey,
+    );
+    stage = "api_key_verification";
+    const verificationResponse = await fetch(
+      `${seraNetworkUrls.sepolia}/api-keys/verify`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(credentials),
+      },
+    );
+    if (!verificationResponse.ok) {
+      throw new Error(
+        `Sera API-key verification returned HTTP ${verificationResponse.status}`,
+      );
+    }
+    const verification = seraApiKeyVerificationSchema.parse(
+      await verificationResponse.json(),
+    );
+    if (
+      verification.owner_address.toLowerCase() !== wallet.address.toLowerCase()
+    ) {
+      throw new PrivyOwnerMismatchError();
+    }
+    stage = "account_apis";
+    const accountResponse = await runSeraAccountSpike(
+      new Request(request.url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(parsed.data),
+      }),
+      {
+        ...env,
+        SERA_API_KEY: credentials.api_key,
+        SERA_API_SECRET: credentials.api_secret,
+      },
+    );
+    if (!accountResponse.ok) {
+      const failure = z
+        .object({ detail: z.string().optional() })
+        .safeParse(await accountResponse.json());
+      throw new Error(
+        `Sera account spike returned HTTP ${accountResponse.status}: ${
+          failure.success
+            ? (failure.data.detail ?? "unknown error")
+            : "invalid error response"
+        }`,
+      );
+    }
+    const accountResult = (await accountResponse.json()) as Record<
+      string,
+      unknown
+    >;
+    stage = "api_key_revocation";
+    await revokeTemporarySeraCredentials(credentials);
+    credentials = null;
+    return Response.json({
+      ...accountResult,
+      temporaryApiKey: { ownerVerified: true, revoked: true },
+    });
+  } catch (error) {
+    let cleanupFailed = false;
+    if (credentials) {
+      try {
+        await revokeTemporarySeraCredentials(credentials);
+      } catch {
+        cleanupFailed = true;
+      }
+    }
+    console.error("sera_temporary_account_spike_failed", {
+      cleanupFailed,
+      message: error instanceof Error ? error.message : "unknown error",
+      stage,
+    });
+    return Response.json(
+      {
+        cleanupFailed,
+        error: "sera_temporary_account_spike_failed",
+        detail: error instanceof Error ? error.message : "unknown error",
+        stage,
       },
       { status: 502 },
     );
@@ -977,6 +1215,7 @@ export default {
       "/__spike/privy-preflight",
       "/__spike/privy-signing",
       "/__spike/sera-account",
+      "/__spike/sera-account-temporary-key",
     ].includes(url.pathname);
     if (request.method === "OPTIONS" && isPrivySpike) {
       return new Response(null, {
@@ -1027,6 +1266,15 @@ export default {
       return withPrivySpikeCors(
         request,
         await runSeraAccountSpike(request, env),
+      );
+    }
+    if (
+      request.method === "POST" &&
+      url.pathname === "/__spike/sera-account-temporary-key"
+    ) {
+      return withPrivySpikeCors(
+        request,
+        await runTemporarySeraAccountSpike(request, env),
       );
     }
     if (request.method !== "POST" || url.pathname !== "/tool-stream") {
